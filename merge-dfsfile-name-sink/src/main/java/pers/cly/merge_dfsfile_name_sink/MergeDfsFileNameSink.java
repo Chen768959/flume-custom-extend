@@ -28,6 +28,9 @@ public class MergeDfsFileNameSink  extends AbstractSink implements Configurable 
   private String fileUrl = "";
   private String hdfsUrl = "";
 
+  private Configuration conf = new Configuration();
+
+  private FileSystem hdfs;
 
   public Status process() throws EventDeliveryException {
     Status status = null;
@@ -54,31 +57,7 @@ public class MergeDfsFileNameSink  extends AbstractSink implements Configurable 
 
         String body = new String(event.getBody(), "UTF-8");
 
-        //存入HDFS
-        Configuration conf = new Configuration();
-        //hdfs路径
-        conf.set("fs.defaultFS", hdfsUrl);
-        //允许文件追加内容
-        conf.setBoolean("dfs.support.append",true);
-        /**
-         * 设置为true时：
-         * 如果在pipeline中存在一个DataNode故障时，
-         * 那么hdfs客户端会从pipeline删除失败的DataNode，
-         * 然后继续尝试往剩下的DataNodes进行写入。
-         */
-        conf.setBoolean("dfs.client.block.write.replace-datanode-on-failure.enable", true);
-        /**
-         * 该属性只有在dfs.client.block.write.replace-datanode-on-failure.enable属性被设置为true时才有效。
-         * 该属性可选值有三个：ALWAYS，NEVER，DEFAULT。
-         * 用来控制当DataNode因为不能用被删除后，是否要往pipeline中添加新的DataNode，添加多少。
-         * ALWAYS为只要删掉一个就新添加一个。
-         * NEVER为永远不添加新的DataNode。
-         * 设置该属性时要注意：当集群过小时，可能没有多余的DataNode可供添加，当设置了该属性但又没有节点可添加后会报错。
-         */
-        conf.set("dfs.client.block.write.replace-datanode-on-failure.policy", "NEVER");
-
         Path filePath = new Path(hdfsPathAll);
-        FileSystem hdfs = FileSystem.get(new URI(hdfsUrl),conf,"root");
 
         // FileSystem hdfs = filePath.getFileSystem(conf);
         if (!hdfs.exists(filePath)) {
@@ -110,12 +89,7 @@ public class MergeDfsFileNameSink  extends AbstractSink implements Configurable 
       e.printStackTrace();
       txn.rollback();
       status = Status.BACKOFF;
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    } catch (URISyntaxException e) {
-      e.printStackTrace();
-    } finally
-    {
+    } finally {
       txn.close();
     }
 
@@ -133,6 +107,40 @@ public class MergeDfsFileNameSink  extends AbstractSink implements Configurable 
     hdfsPath = context.getString("hdfspath");
     fileUrl = context.getString("fileUrl");
     hdfsUrl = context.getString("hdfsUrl");
+
+    //hdfs路径
+    conf.set("fs.defaultFS", hdfsUrl);
+
+    //允许文件追加内容
+    conf.setBoolean("dfs.support.append",true);
+
+    /**
+     * 设置为true时：
+     * 如果在pipeline中存在一个DataNode故障时，
+     * 那么hdfs客户端会从pipeline删除失败的DataNode，
+     * 然后继续尝试往剩下的DataNodes进行写入。
+     */
+    conf.setBoolean("dfs.client.block.write.replace-datanode-on-failure.enable", true);
+
+    /**
+     * 该属性只有在dfs.client.block.write.replace-datanode-on-failure.enable属性被设置为true时才有效。
+     * 该属性可选值有三个：ALWAYS，NEVER，DEFAULT。
+     * 用来控制当DataNode因为不能用被删除后，是否要往pipeline中添加新的DataNode，添加多少。
+     * ALWAYS为只要删掉一个就新添加一个。
+     * NEVER为永远不添加新的DataNode。
+     * 设置该属性时要注意：当集群过小时，可能没有多余的DataNode可供添加，当设置了该属性但又没有节点可添加后会报错。
+     */
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.policy", "NEVER");
+
+    try {
+      hdfs = FileSystem.get(new URI(hdfsUrl),conf,"root");
+    } catch (IOException e) {
+      e.printStackTrace();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    } catch (URISyntaxException e) {
+      e.printStackTrace();
+    }
   }
 
   @Override
