@@ -3,7 +3,11 @@ package per.cly.parsing_es_sink;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.flume.Channel;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
@@ -238,7 +242,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           putCommonDataToMap(ruleNode, eventJsonNode.get(fieldName), resultEsDataMap);
         }else {
           try {
-            resultEsDataMap.put(ruleNode.asText(), eventJsonNode.get(fieldName).asText());
+            resultEsDataMap.put(ruleNode.asText(), Optional.ofNullable(eventJsonNode.get(fieldName)).orElse(new TextNode("")).asText());
           }catch (Exception e){
             throw new RuntimeException("异常 fieldName："+fieldName,e);
           }
@@ -322,6 +326,14 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     } catch (Exception e) {
       LOG.error("aJsonNodeConf解析异常", e);
       stop();
+    }
+
+    String analysisValueJsonNodeRuleGroup = context.getString("analysisValueJsonNodeRule");
+    Map<String, String> analysisValueJsonNodeRuleGroupMap = context.getSubProperties("analysisValueJsonNodeRule.");
+    if (!analysisValueJsonNodeRuleGroupMap.isEmpty()) {
+      // key为rule1、rule2   value为规则
+      Map<String, String> analysisValueJsonNodeRuleMap = selectByKeys(analysisValueJsonNodeRuleGroupMap,
+              analysisValueJsonNodeRuleGroup.split("\\s+"));
     }
 
     initEs();
@@ -417,5 +429,15 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
   public List<Map<String, String>> testAnalysis(List<Event> eventBatch){
     return getEventEsDataList(eventBatch);
+  }
+
+  private Map<String, String> selectByKeys(Map<String, String> map, String[] keys) {
+    Map<String, String> result = Maps.newHashMap();
+    for (String key : keys) {
+      if (map.containsKey(key)) {
+        result.put(key, map.get(key));
+      }
+    }
+    return result;
   }
 }

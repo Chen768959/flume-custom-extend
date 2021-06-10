@@ -124,7 +124,6 @@ public class TestJson {
   public void copyTest(){
     try {
       JsonNode jsonNode = objectMapper.readTree(jsonStr);
-
       System.out.println(jsonNode.toString());
       long startTime=System.nanoTime();   //获取开始时间
       for (int i=0 ;i<10000; i++){
