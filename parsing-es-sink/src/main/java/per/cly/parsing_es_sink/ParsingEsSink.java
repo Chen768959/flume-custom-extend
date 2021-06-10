@@ -284,7 +284,17 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return void
    */
   private void rollbackBulkItemResponses(BulkItemResponse[] items) {
+    BulkRequest request = new BulkRequest();
+    for (BulkItemResponse item : items) {
+      DeleteRequest deleteRequest = new DeleteRequest(esIndex, item.getId());
+      request.add(deleteRequest);
+    }
 
+    try {
+      esClient.bulk(request,RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
   }
 
   /**
