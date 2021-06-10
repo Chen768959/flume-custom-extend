@@ -87,7 +87,7 @@
     </dependencies>
 
     <build>
-        <finalName>merge-file-name-sink-1.0</finalName>
+        <finalName>parsing-es-sink-1.0</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
