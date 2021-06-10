@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -45,11 +46,8 @@ import java.util.Optional;
 public class ParsingEsSink extends AbstractSink implements Configurable {
   private static final Logger LOG = LoggerFactory.getLogger(ParsingEsSink.class);
 
-  // es ip
-  private String esIp;
-
-  // es port
-  private int esPort;
+  // es hosts
+  HttpHost[] httpHosts;
 
   // esIndex
   private String esIndex;
@@ -305,8 +303,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return void
    */
   public void configure(Context context) {
-    esIp = context.getString("es-ip");
-    esPort = context.getInteger("es-port");
+    String[] esHostArr = context.getString("es-host").split("\\,");
+    httpHosts = new HttpHost[esHostArr.length];
+    for (int i=0;i<esHostArr.length;i++){
+      String[] host = esHostArr[i].split("\\:");
+      httpHosts[i] = new HttpHost(host[0],Integer.parseInt(host[1]),"http");
+    }
     esIndex = context.getString("es-index");
     userName = context.getString("user-name");
     password = context.getString("password");
@@ -391,7 +393,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     credentialsProvider.setCredentials(AuthScope.ANY,
             new UsernamePasswordCredentials(userName, password));  //es账号密码（默认用户名为elastic）
     esClient =new RestHighLevelClient(
-            RestClient.builder(new HttpHost(esIp,esPort,"http")).setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
+            RestClient.builder(httpHosts).setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
               public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder) {
                 httpClientBuilder.disableAuthCaching();
                 return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);

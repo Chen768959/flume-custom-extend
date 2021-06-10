@@ -87,7 +87,7 @@
     </dependencies>
 
     <build>
-        <finalName>parsing-es-sink-1.0</finalName>
+        <finalName>flume-parsing-sink-1.9.0</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
