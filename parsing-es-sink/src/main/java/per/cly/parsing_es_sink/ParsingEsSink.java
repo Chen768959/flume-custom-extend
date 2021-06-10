@@ -21,6 +21,7 @@ import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
@@ -35,6 +36,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * @author Chen768959
@@ -153,7 +155,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
 
       try {
-        JsonNode eventJsonNode = objectMapper.readTree(eventBody);
+        JsonNode eventJsonNode = null;
+        try {
+          eventJsonNode = objectMapper.readTree(eventBody);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
 
         // 解析此event的公共属性
         Map<String, String> commonFieldMap = new HashMap<>();
@@ -177,28 +184,22 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           }
 
           //1.先将待原始解析数据的json数组（oldArr）拷贝一份，作为newArr，
-          //2.然后删除oldArr中的所有元素，
-          JsonNode newEventArrJsonNode = oldEventArrJsonNode.deepCopy();
-          oldEventArrJsonNode.removeAll();
+          ArrayNode newEventArrJsonNode = oldEventArrJsonNode.deepCopy();
 
           // 3.接着遍历newArr，解析每一个结果，
           // 解析数组中的每个待解析数据为新map
-          if (newEventArrJsonNode.isArray()){
-            Iterator<JsonNode> eventArrJsonNodeIterator = newEventArrJsonNode.elements();
-            while (eventArrJsonNodeIterator.hasNext()){
-              Map<String, String> arrFieldMap = new HashMap<>();
-              JsonNode eventJsonNodeForArr = eventArrJsonNodeIterator.next();
-              putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
-              arrFieldMap.putAll(commonFieldMap);
+          for (JsonNode eventJsonNodeForArr : newEventArrJsonNode){
+            Map<String, String> arrFieldMap = new HashMap<>();
+            putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
+            arrFieldMap.putAll(commonFieldMap);
 
-              //将一个数组内的解析结果map作为一条待写入es数据
-              //4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
-              oldEventArrJsonNode.insert(0, eventJsonNodeForArr);
-              arrFieldMap.put(completeDataFieldName, eventJsonNode.deepCopy().toString());
-              eventEsDataList.add(arrFieldMap);
-            }
-          }else {
-            throw new RuntimeException("指定数组规则异常，不符合实际数据");
+            //将一个数组内的解析结果map作为一条待写入es数据
+            //2.然后删除oldArr中的所有元素，
+            //4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
+            oldEventArrJsonNode.removeAll();
+            oldEventArrJsonNode.add(eventJsonNodeForArr);
+            arrFieldMap.put(completeDataFieldName, eventJsonNode.deepCopy().toString());
+            eventEsDataList.add(arrFieldMap);
           }
         }else {
           // 无数组规则，直接将公共信息作为一条待写入es数据
@@ -238,7 +239,11 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           // 将子对象规则，与子待解析对象数据递归解析
           putCommonDataToMap(ruleNode, eventJsonNode.get(fieldName), resultEsDataMap);
         }else {
-          resultEsDataMap.put(ruleNode.asText(), eventJsonNode.get(fieldName).asText());
+          try {
+            resultEsDataMap.put(ruleNode.asText(), eventJsonNode.get(fieldName).asText());
+          }catch (Exception e){
+            throw new RuntimeException("异常 fieldName："+fieldName,e);
+          }
         }
       }
     }
@@ -301,7 +306,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     try {
       analysisJsonNodeRule = objectMapper.readTree(context.getString("analysisJsonNodeRule"));
 
-      checkIsArrays(analysisJsonNodeRule, false);
+      checkIsArrays(analysisJsonNodeRule, false, null);
     } catch (Exception e) {
       LOG.error("aJsonNodeConf解析异常", e);
       stop();
@@ -318,7 +323,9 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @date 2021/6/9 下午 9:57
    * @return void
    */
-  private void checkIsArrays(JsonNode analysisJsonNodeConf, boolean hasArray) throws Exception {
+  private void checkIsArrays(JsonNode analysisJsonNodeConf, boolean hasArray, List<String> aJsonNodeArrKeyStructure) throws Exception {
+
+
     boolean nowHasArray = hasArray;
     Iterator<String> analysisJsonNodeNameIterator = analysisJsonNodeConf.fieldNames();
 
@@ -330,13 +337,18 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
         if (nowHasArray){
           throw new RuntimeException("json解析策略禁止配置多个数组");
         }else {
-          analysisJsonNodeArrRule = jsonNode.get(0);
+          aJsonNodeArrKeyStructure = Optional.ofNullable(aJsonNodeArrKeyStructure).orElse(new ArrayList<>());
+          aJsonNodeArrKeyStructure.add(analysisJsonNodeName);
+          this.analysisJsonNodeArrKeyStructure = aJsonNodeArrKeyStructure;
+          this.analysisJsonNodeArrRule = jsonNode.get(0);
           nowHasArray = true;
         }
       }
 
       if (jsonNode.isObject()){
-        checkIsArrays(jsonNode, nowHasArray);
+        ArrayList<String> nowAnalysisJsonNodeArrKeyStructure = new ArrayList<>(Optional.ofNullable(aJsonNodeArrKeyStructure).orElse(new ArrayList<>()));
+        nowAnalysisJsonNodeArrKeyStructure.add(analysisJsonNodeName);
+        checkIsArrays(jsonNode, nowHasArray,nowAnalysisJsonNodeArrKeyStructure);
       }
     }
   }
@@ -376,5 +388,22 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
               }
             })
     );
+  }
+
+  // 加载规则以及其中数组规则
+  public void testInit(String completeDataFieldName, String analysisJsonNodeRule){
+    this.completeDataFieldName = completeDataFieldName;
+
+    try {
+      this.analysisJsonNodeRule = objectMapper.readTree(analysisJsonNodeRule);
+
+      checkIsArrays(this.analysisJsonNodeRule, false,null);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public List<Map<String, String>> testAnalysis(List<Event> eventBatch){
+    return getEventEsDataList(eventBatch);
   }
 }
