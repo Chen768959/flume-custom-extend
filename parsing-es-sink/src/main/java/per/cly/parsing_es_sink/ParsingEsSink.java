@@ -2,6 +2,7 @@ package per.cly.parsing_es_sink;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.google.common.collect.Lists;
 import org.apache.flume.Channel;
 import org.apache.flume.Context;
@@ -55,15 +56,18 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
   private String password;
 
+  // 每条完整数据被存入es后的对应列名
+  private String completeDataFieldName;
+
   // 一次从channel中取出的event数
   private int batchSize;
 
   // 公共规则，解析原始json数据的那些key，以及存放es的列名
   // key：原始json数据的key名及位置   value：对应es列名
-  private JsonNode analysisJsonNodeConf;
+  private JsonNode analysisJsonNodeRule;
 
   // 数组规则
-  private JsonNode analysisJsonNodeArrConf;
+  private JsonNode analysisJsonNodeArrRule;
 
   // 数组规则存在的key位置，如果此规则存在，则表示一个json数据会按照此规则解析出多个带写入es的map，且每个map都要包含公共map属性
   private List<String> analysisJsonNodeArrKeyStructure = new ArrayList<>();
@@ -153,26 +157,44 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
         // 解析此event的公共属性
         Map<String, String> commonFieldMap = new HashMap<>();
-        putCommonDataToMap(analysisJsonNodeConf, eventJsonNode, commonFieldMap);
+        putCommonDataToMap(analysisJsonNodeRule, eventJsonNode, commonFieldMap);
 
         // 如果此event有array规则，则解析array中的每一个对象的属性，
         // 每个arr中的对象都会加上刚刚的公共属性生成新的map（也就是一条待写入es数据）
         if (! analysisJsonNodeArrKeyStructure.isEmpty()){
+          /**
+           * 1.先将待原始解析数据的json数组（oldArr）拷贝一份，作为newArr，
+           * 2.然后删除oldArr中的所有元素，
+           * 3.接着遍历newArr，解析每一个结果，
+           * 4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
+           * 这样就拥有了包含公共数据与特定数组元素数据的总node
+           */
+
           // 找到event中的待解析数组
-          JsonNode eventArrJsonNode = eventJsonNode.get(analysisJsonNodeArrKeyStructure.get(0));
+          ArrayNode oldEventArrJsonNode = (ArrayNode) eventJsonNode.get(analysisJsonNodeArrKeyStructure.get(0));
           for (int i=1; i<analysisJsonNodeArrKeyStructure.size(); i++){
-            eventArrJsonNode = eventArrJsonNode.get(i);
+            oldEventArrJsonNode = (ArrayNode) oldEventArrJsonNode.get(i);
           }
+
+          //1.先将待原始解析数据的json数组（oldArr）拷贝一份，作为newArr，
+          //2.然后删除oldArr中的所有元素，
+          JsonNode newEventArrJsonNode = oldEventArrJsonNode.deepCopy();
+          oldEventArrJsonNode.removeAll();
+
+          // 3.接着遍历newArr，解析每一个结果，
           // 解析数组中的每个待解析数据为新map
-          if (eventArrJsonNode.isArray()){
-            Iterator<JsonNode> eventArrJsonNodeIterator = eventArrJsonNode.elements();
+          if (newEventArrJsonNode.isArray()){
+            Iterator<JsonNode> eventArrJsonNodeIterator = newEventArrJsonNode.elements();
             while (eventArrJsonNodeIterator.hasNext()){
               Map<String, String> arrFieldMap = new HashMap<>();
               JsonNode eventJsonNodeForArr = eventArrJsonNodeIterator.next();
-              putCommonDataToMap(analysisJsonNodeArrConf, eventJsonNodeForArr, arrFieldMap);
+              putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
               arrFieldMap.putAll(commonFieldMap);
 
               //将一个数组内的解析结果map作为一条待写入es数据
+              //4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
+              oldEventArrJsonNode.insert(0, eventJsonNodeForArr);
+              arrFieldMap.put(completeDataFieldName, eventJsonNode.deepCopy().toString());
               eventEsDataList.add(arrFieldMap);
             }
           }else {
@@ -180,6 +202,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           }
         }else {
           // 无数组规则，直接将公共信息作为一条待写入es数据
+          commonFieldMap.put(completeDataFieldName, eventJsonNode.toString());
           eventEsDataList.add(commonFieldMap);
         }
       } catch (Exception e) {
@@ -194,32 +217,31 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * 解析属性进入map
    * @param analysisJsonNodeConf 规则
    * @param eventJsonNode 待解析数据
-   * @param commonFieldMap 解析结果，代表一条需存入es的数据
+   * @param resultEsDataMap 解析结果，代表一条需存入es的数据
    * @author Chen768959
    * @date 2021/6/9 下午 10:19
    * @return void
    */
-  private void putCommonDataToMap(JsonNode analysisJsonNodeConf, JsonNode eventJsonNode, Map<String, String> commonFieldMap) {
+  private void putCommonDataToMap(JsonNode analysisJsonNodeConf, JsonNode eventJsonNode,
+                                  Map<String, String> resultEsDataMap) {
+    Iterator<Map.Entry<String, JsonNode>> eventRules = analysisJsonNodeConf.fields();
 
-  }
+    while (eventRules.hasNext()){
+      // key：规则json的key，与待解析数据的key相同
+      // value：规则json的value，可能是一个新的对象规则，或者是“此数据存入es后的列名”
+      Map.Entry<String, JsonNode> eventRule = eventRules.next();
+      String fieldName = eventRule.getKey();
+      JsonNode ruleNode = eventRule.getValue();
 
-  /**
-   * 根据规则解析一个json数据
-   * @param analysisJsonNodeConf
-   * @param eventJsonNode
-   * @author Chen768959
-   * @date 2021/6/9 下午 9:36
-   * @return java.util.List<java.util.Map<java.lang.String,java.lang.String>>
-   */
-  private List<Map<String, String>> getEsDataListForEvent(JsonNode analysisJsonNodeConf, JsonNode eventJsonNode) {
-    Iterator<String> eventJsonFieldNameIterator = eventJsonNode.fieldNames();
-    while (eventJsonFieldNameIterator.hasNext()){ // 迭代规则的每一个key
-      String eventJsonFieldName = eventJsonFieldNameIterator.next();
+      if (!ruleNode.isArray()){
+        if (ruleNode.isObject()){
+          // 将子对象规则，与子待解析对象数据递归解析
+          putCommonDataToMap(ruleNode, eventJsonNode.get(fieldName), resultEsDataMap);
+        }else {
+          resultEsDataMap.put(ruleNode.asText(), eventJsonNode.get(fieldName).asText());
+        }
+      }
     }
-
-    Map<String, String> esDataMap = new HashMap<>();
-
-    return null;
   }
 
   /**
@@ -268,17 +290,18 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return void
    */
   public void configure(Context context) {
-    esIp = context.getString("esIp");
-    esPort = context.getInteger("esPort");
-    esIndex = context.getString("esIndex");
-    userName = context.getString("userName");
+    esIp = context.getString("es-ip");
+    esPort = context.getInteger("es-port");
+    esIndex = context.getString("es-index");
+    userName = context.getString("user-name");
     password = context.getString("password");
     batchSize = context.getInteger("batch-size");
+    completeDataFieldName = context.getString("complete-data-es-fname");
 
     try {
-      analysisJsonNodeConf = objectMapper.readTree(context.getString("analysisJsonNodeConf"));
+      analysisJsonNodeRule = objectMapper.readTree(context.getString("analysisJsonNodeRule"));
 
-      checkIsArrays(analysisJsonNodeConf, false);
+      checkIsArrays(analysisJsonNodeRule, false);
     } catch (Exception e) {
       LOG.error("aJsonNodeConf解析异常", e);
       stop();
@@ -307,7 +330,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
         if (nowHasArray){
           throw new RuntimeException("json解析策略禁止配置多个数组");
         }else {
-          analysisJsonNodeArrConf = jsonNode.get(0);
+          analysisJsonNodeArrRule = jsonNode.get(0);
           nowHasArray = true;
         }
       }
@@ -333,6 +356,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     }
   }
 
+  /**
+   * 初始化es
+   * @author Chen768959
+   * @date 2021/6/10 上午 11:02
+   * @return void
+   */
   private void initEs(){
     //当es用用户名和密码连接时
     //初始化ES操作客户端

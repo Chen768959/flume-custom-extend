@@ -95,4 +95,23 @@ public class TestJson {
       e.printStackTrace();
     }
   }
+
+  @Test
+  public void copyTest(){
+    try {
+      JsonNode jsonNode = objectMapper.readTree(jsonStr);
+
+      System.out.println(jsonNode.toString());
+      long startTime=System.nanoTime();   //获取开始时间
+      for (int i=0 ;i<10000; i++){
+        JsonNode jsonNode1 = jsonNode.deepCopy();
+      }
+
+      long endTime=System.nanoTime(); //获取结束时间
+
+      System.out.println("程序运行时间： " + (endTime - startTime ) + "ms");
+    } catch (JsonProcessingException e) {
+      e.printStackTrace();
+    }
+  }
 }
