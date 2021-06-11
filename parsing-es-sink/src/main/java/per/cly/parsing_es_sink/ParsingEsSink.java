@@ -34,13 +34,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * @author Chen768959
@@ -439,7 +437,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
             analysisValueJsonNodeRuleList.add(analysisValueJsonNodeRule);
           }catch (Exception e){
-            throw new RuntimeException("解析value匹配配置异常");
+            throw new RuntimeException("解析value匹配配置异常",e);
           }
         }else {
           throw new RuntimeException("value匹配配置有误");
@@ -474,14 +472,14 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           case ObjectKey:
             if (jsonNode.isObject()){
               nowJsonNode = jsonNode;
-              keyStructureList.remove(keyStructure);
+              keyStructureIterator.remove();
               continue;
             }
             break;
           case ArrKey:
             if (jsonNode.isArray()){
               nowJsonNode = jsonNode.get(0);
-              keyStructureList.remove(keyStructure);
+              keyStructureIterator.remove();
               continue;
             }
             break;
@@ -524,7 +522,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           case ObjectKey:
             if (nowJsonNode.isObject()){
               // 匹配成功，删除此key规则
-              keyStructureList.remove(nextKeyStructure);
+              keyStructureIterator.remove();
               // 使用剩余规则继续匹配当前对象
               resValue = getResValueByAnalysisValueJsonNodeRule(keyStructureList, targetKeyValue, resKeyName, nowJsonNode);
             }
@@ -532,7 +530,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           case ArrKey:
             if (nowJsonNode.isArray()){
               // 匹配成功，删除此key规则
-              keyStructureList.remove(nextKeyStructure);
+              keyStructureIterator.remove();
               // 循环数组中的每个对象，直到找到resValue结果
               ArrayNode arrayNode = (ArrayNode) nowJsonNode;
               for (JsonNode jNode: arrayNode){
@@ -703,40 +701,6 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     );
   }
 
-  // 加载规则以及其中数组规则
-  public void testInit(String completeDataFieldName, String analysisJsonNodeRule){
-    this.completeDataFieldName = completeDataFieldName;
-
-    try {
-      this.analysisJsonNodeRule = objectMapper.readTree(analysisJsonNodeRule);
-
-      checkIsArrays(this.analysisJsonNodeRule, false,null);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  public List<Map<String, String>> testAnalysis(List<Event> eventBatch){
-    List<Map<String, String>> eventEsDataList = new ArrayList<>();
-
-    for (Event event : eventBatch){
-      byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
-
-      try {
-        JsonNode eventJsonNode = objectMapper.readTree(eventBody);
-
-        List<Map<String,String>> eventEsDataListForEvent = getEventEsDataList(eventJsonNode);
-
-        eventEsDataList.addAll(eventEsDataListForEvent);
-
-      }catch (Exception e){
-        throw new RuntimeException(e);
-      }
-    }
-
-    return eventEsDataList;
-  }
-
   private Map<String, String> selectByKeys(Map<String, String> map, String[] keys) {
     Map<String, String> result = Maps.newHashMap();
     for (String key : keys) {
@@ -832,5 +796,83 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     public void setKeyName(String keyName) {
       this.keyName = keyName;
     }
+  }
+
+  // 加载规则以及其中数组规则
+  public void testInit(String completeDataFieldName, String analysisRule, Map<String, String> analysisValueJsonNodeRuleMap){
+    this.completeDataFieldName = completeDataFieldName;
+
+    // 匹配analysisJsonNodeRule
+    try {
+      this.analysisJsonNodeRule = objectMapper.readTree(analysisRule);
+
+      checkIsArrays(this.analysisJsonNodeRule, false,null);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+
+    // 匹配analysisValueJsonNodeRule
+    analysisValueJsonNodeRuleMap.values().forEach(nodeRuleStr->{
+      int maoIndex = nodeRuleStr.length()-1;
+
+      for (; maoIndex>=0; maoIndex--){
+        if (nodeRuleStr.charAt(maoIndex) == ':'){
+          break;
+        }
+      }
+
+      if (maoIndex>=0){
+        String jsonRule = nodeRuleStr.substring(0,maoIndex);
+        String matchValueAndKey = nodeRuleStr.substring(maoIndex+1, nodeRuleStr.length());
+
+        try {
+          JsonNode ruleJsonNode = objectMapper.readTree(jsonRule);
+
+          // 解析出所有的key结构
+          List<KeyStructure> keyStructureList = getRuleKeyLinkedMap(ruleJsonNode);
+
+          // 根据key结构获取此结构对应需要匹配的最终结果值
+          String esFieldName = getValueByKeyStructure(keyStructureList, ruleJsonNode);
+
+          // 确定analysisJsonNodeRule中是否存在数组，如果存在，则判断其数组结构与ruleKeyLinkedMap是否重叠，
+          // 如果重叠，则将ruleKeyLinkedMap缩减为数组内的元素的结构，这样后续匹配时直接匹配数组内的元素
+          reduceRuleKeyLinkedMap(analysisJsonNodeRule, keyStructureList);
+
+          AnalysisValueJsonNodeRule analysisValueJsonNodeRule = new AnalysisValueJsonNodeRule();
+          analysisValueJsonNodeRule.setMatchStr(matchValueAndKey.split("\\,")[0]);
+          analysisValueJsonNodeRule.setResKeyName(matchValueAndKey.split("\\,")[1]);
+          analysisValueJsonNodeRule.setEsFieldName(esFieldName);
+          analysisValueJsonNodeRule.setKeyStructureList(keyStructureList);
+
+          analysisValueJsonNodeRuleList.add(analysisValueJsonNodeRule);
+        }catch (Exception e){
+          throw new RuntimeException("解析value匹配配置异常",e);
+        }
+      }else {
+        throw new RuntimeException("value匹配配置有误");
+      }
+
+    });
+  }
+
+  public List<Map<String, String>> testAnalysis(List<Event> eventBatch){
+    List<Map<String, String>> eventEsDataList = new ArrayList<>();
+
+    for (Event event : eventBatch){
+      byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
+
+      try {
+        JsonNode eventJsonNode = objectMapper.readTree(eventBody);
+
+        List<Map<String,String>> eventEsDataListForEvent = getEventEsDataList(eventJsonNode);
+
+        eventEsDataList.addAll(eventEsDataListForEvent);
+
+      }catch (Exception e){
+        throw new RuntimeException(e);
+      }
+    }
+
+    return eventEsDataList;
   }
 }
