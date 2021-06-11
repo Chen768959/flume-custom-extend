@@ -34,12 +34,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * @author Chen768959
@@ -55,7 +56,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private String esIndexPre;
 
   // esIndex匹配规则
-  private LinkedHashMap<String, AnalysisValueRuleKeyEnum> esIndexRuleLinkedMap;
+  private List<KeyStructure> esIndexRuleLinkedMap;
 
   private String userName;
 
@@ -186,7 +187,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return java.lang.String
    */
   private String getEsIndex(JsonNode eventJsonNode) {
-    String indexAfter = getValueByRuleKeyLinkedMap(this.esIndexRuleLinkedMap, eventJsonNode);
+    String indexAfter = getValueByKeyStructure(this.esIndexRuleLinkedMap, eventJsonNode);
     if (indexAfter != null){
       return this.esIndexPre+indexAfter;
     }else {
@@ -244,7 +245,10 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
         // 寻找特殊规则匹配结果（此时的analysisValueJsonNodeRule规则对应的就是数组内部的单元素结构）
         for (AnalysisValueJsonNodeRule analysisValueJsonNodeRule : analysisValueJsonNodeRuleList){
-          String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule, eventJsonNodeForArr);
+          String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule.getKeyStructureList(),
+                                                                    analysisValueJsonNodeRule.getMatchStr(),
+                                                                    analysisValueJsonNodeRule.getResKeyName(),
+                                                                    eventJsonNodeForArr);
           arrFieldMap.put(analysisValueJsonNodeRule.esFieldName, resValue);
         }
 
@@ -255,7 +259,10 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       commonFieldMap.put(completeDataFieldName, eventJsonNode.toString());
       // 寻找特殊规则匹配结果
       for (AnalysisValueJsonNodeRule analysisValueJsonNodeRule : analysisValueJsonNodeRuleList){
-        String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule, eventJsonNode);
+        String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule.getKeyStructureList(),
+                                                                  analysisValueJsonNodeRule.getMatchStr(),
+                                                                  analysisValueJsonNodeRule.getResKeyName(),
+                                                                  eventJsonNode);
         commonFieldMap.put(analysisValueJsonNodeRule.esFieldName, resValue);
       }
 
@@ -375,7 +382,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       this.esIndexRuleLinkedMap = getRuleKeyLinkedMap(esIndexRule);
 
       // 根据key结构获取此结构对应需要匹配的最终结果值
-      this.esIndexPre = getValueByRuleKeyLinkedMap(esIndexRuleLinkedMap, esIndexRule);
+      this.esIndexPre = getValueByKeyStructure(esIndexRuleLinkedMap, esIndexRule);
     } catch (Exception e) {
       throw new RuntimeException("esIndexRule解析异常", e);
     }
@@ -415,20 +422,20 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
             JsonNode ruleJsonNode = objectMapper.readTree(jsonRule);
 
             // 解析出所有的key结构
-            LinkedHashMap<String,AnalysisValueRuleKeyEnum> ruleKeyLinkedMap = getRuleKeyLinkedMap(ruleJsonNode);
+            List<KeyStructure> keyStructureList = getRuleKeyLinkedMap(ruleJsonNode);
 
             // 根据key结构获取此结构对应需要匹配的最终结果值
-            String esFieldName = getValueByRuleKeyLinkedMap(ruleKeyLinkedMap, ruleJsonNode);
+            String esFieldName = getValueByKeyStructure(keyStructureList, ruleJsonNode);
 
             // 确定analysisJsonNodeRule中是否存在数组，如果存在，则判断其数组结构与ruleKeyLinkedMap是否重叠，
             // 如果重叠，则将ruleKeyLinkedMap缩减为数组内的元素的结构，这样后续匹配时直接匹配数组内的元素
-            reduceRuleKeyLinkedMap(analysisJsonNodeRule, ruleKeyLinkedMap);
+            reduceRuleKeyLinkedMap(analysisJsonNodeRule, keyStructureList);
 
             AnalysisValueJsonNodeRule analysisValueJsonNodeRule = new AnalysisValueJsonNodeRule();
             analysisValueJsonNodeRule.setMatchStr(matchValueAndKey.split("\\,")[0]);
             analysisValueJsonNodeRule.setResKeyName(matchValueAndKey.split("\\,")[1]);
             analysisValueJsonNodeRule.setEsFieldName(esFieldName);
-            analysisValueJsonNodeRule.setAnalysisValueRuleKeyLinkedMap(ruleKeyLinkedMap);
+            analysisValueJsonNodeRule.setKeyStructureList(keyStructureList);
 
             analysisValueJsonNodeRuleList.add(analysisValueJsonNodeRule);
           }catch (Exception e){
@@ -448,52 +455,177 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * 确定analysisJsonNodeRule中是否存在数组，如果存在，则判断其数组结构与ruleKeyLinkedMap是否重叠，
    * 如果重叠，则将ruleKeyLinkedMap缩减为数组内的元素的结构，这样后续匹配时直接匹配数组内的元素
    * @param analysisJsonNodeRule
-   * @param ruleKeyLinkedMap
+   * @param keyStructureList
    * @author Chen768959
    * @date 2021/6/11 下午 5:39
    * @return void
    */
-  private void reduceRuleKeyLinkedMap(JsonNode analysisJsonNodeRule, LinkedHashMap<String, AnalysisValueRuleKeyEnum> ruleKeyLinkedMap) {
-    // todo
+  private void reduceRuleKeyLinkedMap(JsonNode analysisJsonNodeRule, List<KeyStructure> keyStructureList) {
+    Iterator<KeyStructure> keyStructureIterator = keyStructureList.iterator();
+    JsonNode nowJsonNode = analysisJsonNodeRule;
 
+    while (keyStructureIterator.hasNext()){
+      KeyStructure keyStructure = keyStructureIterator.next();
+
+      JsonNode jsonNode = nowJsonNode.get(keyStructure.getKeyName());
+      if (jsonNode != null){
+        switch (keyStructure.getAnalysisValueRuleKeyEnum()){
+          // 如果当前结构key为对象key，则判断jsonNode是否为对象，为对象则表示匹配成功，删除此结构，继续循环
+          case ObjectKey:
+            if (jsonNode.isObject()){
+              nowJsonNode = jsonNode;
+              keyStructureList.remove(keyStructure);
+              continue;
+            }
+            break;
+          case ArrKey:
+            if (jsonNode.isArray()){
+              nowJsonNode = jsonNode.get(0);
+              keyStructureList.remove(keyStructure);
+              continue;
+            }
+            break;
+          case StringKey:
+            break;
+        }
+      }
+
+      break;
+    }
   }
 
   /**
-   * 特殊配规则，需要按照指定的key规则匹配value（之前全部是key匹配），找到符合此key的value值后，将同对象下的指定key的value作为结果值
-   * 此方法就是找到这个最终结果值
-   * @param analysisValueJsonNodeRule
-   * @param eventJsonNode 待解析数据
+   * 1、根据“keyStructureList”规则找到“jsonNode”中的匹配规则的key
+   * 2、判断刚刚找到的key的value是否等于“targetKeyValue”
+   * 如果不等于则返回null
+   * 如果相等则表示找到了。
+   * 3、找到value后，则查看相同jsonNode对象中是否有key为“resKeyName”
+   * 4、如果此key也匹配，则此key的value就是该方法最终要找的结果
+   * 如果未匹配则返回null
+   * @param keyStructureList
+   * @param targetKeyValue
+   * @param resKeyName
+   * @param jsonNode 待解析数据
    * @author Chen768959
-   * @date 2021/6/11 下午 5:05
+   * @date 2021/6/11 下午 8:34
    * @return java.lang.String
    */
-  private String getResValueByAnalysisValueJsonNodeRule(AnalysisValueJsonNodeRule analysisValueJsonNodeRule, JsonNode eventJsonNode) {
-    // todo
-    return null;
+  private String getResValueByAnalysisValueJsonNodeRule(List<KeyStructure> keyStructureList, String targetKeyValue,
+                                                        String resKeyName ,JsonNode jsonNode) {
+    String resValue = null;
+    Iterator<KeyStructure> keyStructureIterator = keyStructureList.iterator();
+
+    it: while (keyStructureIterator.hasNext()){
+      KeyStructure nextKeyStructure = keyStructureIterator.next();
+      JsonNode nowJsonNode = jsonNode.get(nextKeyStructure.getKeyName());
+
+      if (nowJsonNode != null){
+        switch (nextKeyStructure.getAnalysisValueRuleKeyEnum()){
+          case ObjectKey:
+            if (nowJsonNode.isObject()){
+              // 匹配成功，删除此key规则
+              keyStructureList.remove(nextKeyStructure);
+              // 使用剩余规则继续匹配当前对象
+              resValue = getResValueByAnalysisValueJsonNodeRule(keyStructureList, targetKeyValue, resKeyName, nowJsonNode);
+            }
+            break it;
+          case ArrKey:
+            if (nowJsonNode.isArray()){
+              // 匹配成功，删除此key规则
+              keyStructureList.remove(nextKeyStructure);
+              // 循环数组中的每个对象，直到找到resValue结果
+              ArrayNode arrayNode = (ArrayNode) nowJsonNode;
+              for (JsonNode jNode: arrayNode){
+                resValue = getResValueByAnalysisValueJsonNodeRule(keyStructureList, targetKeyValue, resKeyName, jNode);
+                if (resValue != null){
+                  break it;
+                }
+              }
+            }
+            break it;
+          case StringKey:
+            // 找到了目标key的value
+            String value = nowJsonNode.asText();
+            // 相等则找到了key，并且其value也匹配目标
+            if (targetKeyValue.equals(value)){
+              // 接着找value的父对象“jsonNode”中是否含有，真正的“结果key”
+              JsonNode resJsonNode = jsonNode.get(resKeyName);
+              if (resJsonNode != null){
+                resValue = resJsonNode.asText();
+              }
+            }
+            break it;
+        }
+      }
+    }
+
+    return resValue;
   }
 
   /**
    * 根据匹配规则，找到jsonNode中的符合规则的key的value
-   * @param ruleKeyLinkedMap 待匹配key的结构规则
+   * 如果遇到数组，则默认匹配其第0位
+   * @param keyStructureList 待匹配key的结构规则
    * @param jsonNode 待解析json
    * @author Chen768959
    * @date 2021/6/11 下午 5:01
    * @return java.lang.String
    */
-  private String getValueByRuleKeyLinkedMap(LinkedHashMap<String, AnalysisValueRuleKeyEnum> ruleKeyLinkedMap, JsonNode jsonNode) {
-    // todo
-    return null;
+  private String getValueByKeyStructure(List<KeyStructure> keyStructureList, JsonNode jsonNode) {
+    JsonNode nowJsonNode = jsonNode;
+    String resValue = null;
+
+    for (KeyStructure keyStructure : keyStructureList){
+      switch (keyStructure.analysisValueRuleKeyEnum){
+        case ObjectKey:
+          nowJsonNode = nowJsonNode.get(keyStructure.keyName);
+          break;
+        case ArrKey:
+          nowJsonNode = nowJsonNode.get(keyStructure.keyName).get(0);
+          break;
+        case StringKey:
+          resValue = nowJsonNode.get(keyStructure.keyName).asText();
+          break;
+      }
+    }
+
+    return resValue;
   }
 
   /**
-   * 解析出所有的key结构
-   * @param ruleJsonNode
+   * 解析出所有的key结构，
+   * 只为找出目的key-value
+   * （此方法只能找到第一个需要被找到的k-v的key，会记录沿途object和arr的结构）
+   * @param jsonNode
    * @author Chen768959
-   * @date 2021/6/11 下午 5:01
-   * @return java.util.LinkedHashMap<java.lang.String,per.cly.parsing_es_sink.ParsingEsSink.AnalysisValueRuleKeyEnum>
+   * @date 2021/6/11 下午 7:40
+   * @return java.util.List<per.cly.parsing_es_sink.ParsingEsSink.KeyStructure>
    */
-  private LinkedHashMap<String, AnalysisValueRuleKeyEnum> getRuleKeyLinkedMap(JsonNode ruleJsonNode) {
-    return null;
+  private List<KeyStructure> getRuleKeyLinkedMap(JsonNode jsonNode) {
+    List<KeyStructure> keyStructureList = new ArrayList<>();
+
+    Iterator<String> fieldNamesIterator = jsonNode.fieldNames();
+    while (fieldNamesIterator.hasNext()){
+      String fieldName = fieldNamesIterator.next();
+      JsonNode jsonNodeByName = jsonNode.get(fieldName);
+
+      if (jsonNodeByName.isObject()){
+        keyStructureList.add(new KeyStructure(fieldName, AnalysisValueRuleKeyEnum.ObjectKey));
+        keyStructureList.addAll(getRuleKeyLinkedMap(jsonNodeByName));
+        continue;
+      }
+
+      if (jsonNodeByName.isArray()){
+        keyStructureList.add(new KeyStructure(fieldName, AnalysisValueRuleKeyEnum.ArrKey));
+        keyStructureList.addAll(getRuleKeyLinkedMap(jsonNodeByName.get(0)));
+        continue;
+      }
+
+      keyStructureList.add(new KeyStructure(fieldName, AnalysisValueRuleKeyEnum.StringKey));
+      break;
+    }
+
+    return keyStructureList;
   }
 
   /**
@@ -617,7 +749,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
   class AnalysisValueJsonNodeRule {
     // 需被匹配的value的所处位置规则
-    private LinkedHashMap<String,AnalysisValueRuleKeyEnum> AnalysisValueRuleKeyLinkedMap;
+    List<KeyStructure> keyStructureList;
 
     // 匹配成功后，同对象下，此key值的value将作为结果，此处为“此key值名”
     private String resKeyName;
@@ -627,8 +759,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     // 该规则制定的key对应的value需要匹配的内容
     private String matchStr;
 
-    public LinkedHashMap<String, AnalysisValueRuleKeyEnum> getAnalysisValueRuleKeyLinkedMap() {
-      return AnalysisValueRuleKeyLinkedMap;
+    public List<KeyStructure> getKeyStructureList() {
+      return new ArrayList<KeyStructure>(keyStructureList);
+    }
+
+    public void setKeyStructureList(List<KeyStructure> keyStructureList) {
+      this.keyStructureList = keyStructureList;
     }
 
     public String getEsFieldName() {
@@ -637,10 +773,6 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
     public String getMatchStr() {
       return matchStr;
-    }
-
-    public void setAnalysisValueRuleKeyLinkedMap(LinkedHashMap<String, AnalysisValueRuleKeyEnum> analysisValueRuleKeyLinkedMap) {
-      AnalysisValueRuleKeyLinkedMap = analysisValueRuleKeyLinkedMap;
     }
 
     public void setEsFieldName(String esFieldName) {
@@ -669,9 +801,36 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     ObjectKey,
 
     // 该key是数组的key，对应一个数组
-    ArrKey,
+    ArrKey;
+  }
 
-    // 该key是int，对应数组中的一个元素
-    IntForArrKey;
+  class KeyStructure {
+    // key类型
+    private AnalysisValueRuleKeyEnum analysisValueRuleKeyEnum;
+
+    // key名
+    private String keyName;
+
+    public KeyStructure(String keyName, AnalysisValueRuleKeyEnum analysisValueRuleKeyEnum){
+      this.keyName = keyName;
+      this.analysisValueRuleKeyEnum = analysisValueRuleKeyEnum;
+
+    }
+
+    public AnalysisValueRuleKeyEnum getAnalysisValueRuleKeyEnum() {
+      return analysisValueRuleKeyEnum;
+    }
+
+    public String getKeyName() {
+      return keyName;
+    }
+
+    public void setAnalysisValueRuleKeyEnum(AnalysisValueRuleKeyEnum analysisValueRuleKeyEnum) {
+      this.analysisValueRuleKeyEnum = analysisValueRuleKeyEnum;
+    }
+
+    public void setKeyName(String keyName) {
+      this.keyName = keyName;
+    }
   }
 }
