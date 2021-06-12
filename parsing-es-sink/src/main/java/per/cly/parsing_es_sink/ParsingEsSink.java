@@ -20,6 +20,8 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -29,6 +31,11 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.indices.CreateIndexRequest;
+import org.elasticsearch.client.indices.CreateIndexResponse;
+import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +66,10 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private String userName;
 
   private String password;
+
+  private String indexNumberOfShards;
+
+  private String indexNumberOfReplicas;
 
   // 每条完整数据被存入es后的对应列名
   private String completeDataFieldName;
@@ -313,6 +324,14 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return boolean 写入成功返回true
    */
   private boolean addAllData(List<Map<String, String>> eventEsDataList, String esIndex) throws IOException {
+    // 判断index是否存在
+    GetIndexRequest getIndexRequest=new GetIndexRequest(esIndex);
+    boolean exists=esClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
+    if (! exists){
+      // 创建index
+      createIndex(esIndex);
+    }
+
     BulkRequest request = new BulkRequest();
 
     eventEsDataList.forEach(eventEsData->{
@@ -330,6 +349,37 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     }
 
     return true;
+  }
+
+  /**
+   * 创建index
+   * @param esIndex
+   * @author Chen768959
+   * @date 2021/6/15 上午 9:47
+   * @return void
+   */
+  private void createIndex(String esIndex) {
+    CreateIndexRequest request=new CreateIndexRequest(esIndex);
+    request.settings(Settings.builder().put("index.number_of_shards", indexNumberOfShards).put("index.number_of_replicas", indexNumberOfReplicas));
+
+    Map<String, Object> message = new HashMap<>();
+    message.put("type", "text");
+    Map<String, Object> properties = new HashMap<>();
+    properties.put("message", message);
+    Map<String, Object> mapping = new HashMap<>();
+    mapping.put("properties", properties);
+    request.mapping(mapping);
+
+    try {
+      CreateIndexResponse createIndexResponse = esClient.indices().create(request, RequestOptions.DEFAULT);
+      boolean acknowledged = createIndexResponse.isAcknowledged();
+      boolean shardsAcknowledged = createIndexResponse.isShardsAcknowledged();
+      if(acknowledged && shardsAcknowledged) {
+        LOG.info("索引创建成功，index-name："+esIndex);
+      }
+    } catch (IOException e) {
+      LOG.error("索引创建失败，index-name："+esIndex,e);
+    }
   }
 
   /**
@@ -371,6 +421,8 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     password = context.getString("password");
     batchSize = context.getInteger("batch-size");
     completeDataFieldName = context.getString("complete-data-es-fname");
+    indexNumberOfShards = context.getString("index-number-of-shards");
+    indexNumberOfReplicas = context.getString("index-number-of-replicas");
 
     // 匹配es index 前缀和寻值规则
     try {
