@@ -1,4 +1,4 @@
-package per.cly.parsing_es_sink;
+package parsing_es_sink;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,8 +20,6 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
-import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -35,7 +33,6 @@ import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,6 +93,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private final static ObjectMapper objectMapper = new ObjectMapper();
 
   public Status process() throws EventDeliveryException {
+    LOG.info("process,执行es传输");
     Status status = Status.READY;
 
     // 获取Channel对象
@@ -146,7 +144,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
               eventEsDataList.addAll(eventEsDataListForEvent);
             }
           }catch (Exception e){
-            LOG.error("解析event json异常，event_body："+eventBody, e);
+            LOG.error("解析event json异常，event_body："+new String(eventBody), e);
           }
         }
 
@@ -411,6 +409,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return void
    */
   public void configure(Context context) {
+    LOG.info("configure,读取配置");
     String[] esHostArr = context.getString("es-host").split("\\,");
     httpHosts = new HttpHost[esHostArr.length];
     for (int i=0;i<esHostArr.length;i++){
@@ -740,6 +739,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private void initEs(){
     //当es用用户名和密码连接时
     //初始化ES操作客户端
+
     final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     credentialsProvider.setCredentials(AuthScope.ANY,
             new UsernamePasswordCredentials(userName, password));  //es账号密码（默认用户名为elastic）
