@@ -64,9 +64,9 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
   private String password;
 
-  private String indexNumberOfShards;
+  private int indexNumberOfShards;
 
-  private String indexNumberOfReplicas;
+  private int indexNumberOfReplicas;
 
   // 每条完整数据被存入es后的对应列名
   private String completeDataFieldName;
@@ -375,7 +375,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       if(acknowledged && shardsAcknowledged) {
         LOG.info("索引创建成功，index-name："+esIndex);
       }
-    } catch (IOException e) {
+    } catch (Exception e) {
       LOG.error("索引创建失败，index-name："+esIndex,e);
     }
   }
@@ -396,8 +396,8 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
     try {
       esClient.bulk(request,RequestOptions.DEFAULT);
-    } catch (IOException e) {
-      e.printStackTrace();
+    } catch (Exception e) {
+      LOG.info("es回退数据失败",e);
     }
   }
 
@@ -417,11 +417,17 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       httpHosts[i] = new HttpHost(host[0],Integer.parseInt(host[1]),"http");
     }
     userName = context.getString("user-name");
+    LOG.info("config解析user-name："+userName);
     password = context.getString("password");
+    LOG.info("config解析password："+password);
     batchSize = context.getInteger("batch-size");
+    LOG.info("config解析batch-size："+batchSize);
     completeDataFieldName = context.getString("complete-data-es-fname");
-    indexNumberOfShards = context.getString("index-number-of-shards");
-    indexNumberOfReplicas = context.getString("index-number-of-replicas");
+    LOG.info("config解析complete-data-es-fname："+completeDataFieldName);
+    indexNumberOfShards = context.getInteger("index-number-of-shards");
+    LOG.info("config解析index-number-of-shards："+indexNumberOfShards);
+    indexNumberOfReplicas = context.getInteger("index-number-of-replicas");
+    LOG.info("config解析index-number-of-replicas："+indexNumberOfReplicas);
 
     // 匹配es index 前缀和寻值规则
     try {
