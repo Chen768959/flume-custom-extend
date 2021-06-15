@@ -13,6 +13,7 @@ import org.apache.flume.EventDeliveryException;
 import org.apache.flume.Transaction;
 import org.apache.flume.conf.Configurable;
 import org.apache.flume.sink.AbstractSink;
+import org.apache.http.ConnectionClosedException;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -93,7 +94,6 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private final static ObjectMapper objectMapper = new ObjectMapper();
 
   public Status process() throws EventDeliveryException {
-    LOG.info("process,执行es传输");
     Status status = Status.READY;
 
     // 获取Channel对象
@@ -229,37 +229,42 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
       // 找到event中的待解析数组
       ArrayNode oldEventArrJsonNode = (ArrayNode) eventJsonNode.get(analysisJsonNodeArrKeyStructure.get(0));
+
       for (int i=1; i<analysisJsonNodeArrKeyStructure.size(); i++){
         oldEventArrJsonNode = (ArrayNode) oldEventArrJsonNode.get(i);
       }
 
-      //1.先将待原始解析数据的json数组（oldArr）拷贝一份，作为newArr，
-      ArrayNode newEventArrJsonNode = oldEventArrJsonNode.deepCopy();
+      if (oldEventArrJsonNode != null){
+        //1.先将待原始解析数据的json数组（oldArr）拷贝一份，作为newArr，
+        ArrayNode newEventArrJsonNode = oldEventArrJsonNode.deepCopy();
 
-      // 3.接着遍历newArr，解析每一个结果，
-      // 解析数组中的每个待解析数据为新map
-      for (JsonNode eventJsonNodeForArr : newEventArrJsonNode){
-        Map<String, String> arrFieldMap = new HashMap<>();
-        putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
-        arrFieldMap.putAll(commonFieldMap);
+        // 3.接着遍历newArr，解析每一个结果，
+        // 解析数组中的每个待解析数据为新map
+        for (JsonNode eventJsonNodeForArr : newEventArrJsonNode){
+          Map<String, String> arrFieldMap = new HashMap<>();
+          putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
+          arrFieldMap.putAll(commonFieldMap);
 
-        //将一个数组内的解析结果map作为一条待写入es数据
-        //2.然后删除oldArr中的所有元素，
-        //4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
-        oldEventArrJsonNode.removeAll();
-        oldEventArrJsonNode.add(eventJsonNodeForArr);
-        arrFieldMap.put(completeDataFieldName, eventJsonNode.deepCopy().toString());
+          //将一个数组内的解析结果map作为一条待写入es数据
+          //2.然后删除oldArr中的所有元素，
+          //4.每次遍历末尾处都将newArr中的遍历node存入oldArr中的第一项，然后再将oldArr所属的总node深拷贝一份，
+          oldEventArrJsonNode.removeAll();
+          oldEventArrJsonNode.add(eventJsonNodeForArr);
+          arrFieldMap.put(completeDataFieldName, eventJsonNode.deepCopy().toString());
 
-        // 寻找特殊规则匹配结果（此时的analysisValueJsonNodeRule规则对应的就是数组内部的单元素结构）
-        for (AnalysisValueJsonNodeRule analysisValueJsonNodeRule : analysisValueJsonNodeRuleList){
-          String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule.getKeyStructureList(),
-                                                                    analysisValueJsonNodeRule.getMatchStr(),
-                                                                    analysisValueJsonNodeRule.getResKeyName(),
-                                                                    eventJsonNodeForArr);
-          arrFieldMap.put(analysisValueJsonNodeRule.esFieldName, resValue);
+          // 寻找特殊规则匹配结果（此时的analysisValueJsonNodeRule规则对应的就是数组内部的单元素结构）
+          for (AnalysisValueJsonNodeRule analysisValueJsonNodeRule : analysisValueJsonNodeRuleList){
+            String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule.getKeyStructureList(),
+                    analysisValueJsonNodeRule.getMatchStr(),
+                    analysisValueJsonNodeRule.getResKeyName(),
+                    eventJsonNodeForArr);
+            arrFieldMap.put(analysisValueJsonNodeRule.esFieldName, resValue);
+          }
+
+          eventEsDataList.add(arrFieldMap);
         }
-
-        eventEsDataList.add(arrFieldMap);
+      }else {
+        eventEsDataList.add(commonFieldMap);
       }
     }else {
       // 无数组规则，直接将公共信息作为一条待写入es数据
@@ -267,9 +272,9 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       // 寻找特殊规则匹配结果
       for (AnalysisValueJsonNodeRule analysisValueJsonNodeRule : analysisValueJsonNodeRuleList){
         String resValue = getResValueByAnalysisValueJsonNodeRule(analysisValueJsonNodeRule.getKeyStructureList(),
-                                                                  analysisValueJsonNodeRule.getMatchStr(),
-                                                                  analysisValueJsonNodeRule.getResKeyName(),
-                                                                  eventJsonNode);
+                analysisValueJsonNodeRule.getMatchStr(),
+                analysisValueJsonNodeRule.getResKeyName(),
+                eventJsonNode);
         commonFieldMap.put(analysisValueJsonNodeRule.esFieldName, resValue);
       }
 
@@ -322,30 +327,41 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
    * @return boolean 写入成功返回true
    */
   private boolean addAllData(List<Map<String, String>> eventEsDataList, String esIndex) throws IOException {
-    // 判断index是否存在
-    GetIndexRequest getIndexRequest=new GetIndexRequest(esIndex);
-    boolean exists=esClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
-    if (! exists){
-      // 创建index
-      createIndex(esIndex);
-    }
+    if (!Optional.ofNullable(eventEsDataList).orElse(new ArrayList<>()).isEmpty()){
+      // 判断index是否存在
+      GetIndexRequest getIndexRequest=new GetIndexRequest(esIndex);
+      try{
+        boolean exists=esClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
+        if (! exists){
+          // 创建index
+          createIndex(esIndex);
+        }
+      }catch (ConnectionClosedException colesE){
+        initEs();
+        boolean exists=esClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
+        if (! exists){
+          // 创建index
+          createIndex(esIndex);
+        }
+      }
 
-    BulkRequest request = new BulkRequest();
 
-    eventEsDataList.forEach(eventEsData->{
-      request.add(new IndexRequest(esIndex).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
-    });
+      BulkRequest request = new BulkRequest();
 
-    BulkResponse bulk = esClient.bulk(request, RequestOptions.DEFAULT);
+      eventEsDataList.forEach(eventEsData->{
+        request.add(new IndexRequest(esIndex).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
+      });
 
-    for (BulkItemResponse bulkItemResponse : bulk.getItems()){
-      if (bulkItemResponse.isFailed()){
-        //删除刚刚写入的数据
-        rollbackBulkItemResponses(bulk.getItems(), esIndex);
-        return false;
+      BulkResponse bulk = esClient.bulk(request, RequestOptions.DEFAULT);
+
+      for (BulkItemResponse bulkItemResponse : bulk.getItems()){
+        if (bulkItemResponse.isFailed()){
+          //删除刚刚写入的数据
+          rollbackBulkItemResponses(bulk.getItems(), esIndex);
+          return false;
+        }
       }
     }
-
     return true;
   }
 
@@ -932,5 +948,86 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     }
 
     return eventEsDataList;
+  }
+
+  private static RestHighLevelClient restHighLevelClient;
+
+  static {
+    final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+    credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("elastic", "operation"));
+    RestClientBuilder restClientBuilder = RestClient.builder(new HttpHost("192.168.209.128", 9200, "http"))
+            .setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
+              @Override
+              public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpAsyncClientBuilder) {
+                return httpAsyncClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+              }
+            });
+    restHighLevelClient = new RestHighLevelClient(restClientBuilder);
+  }
+
+
+  /**
+   * 判断某个index是否存在
+   *
+   * @param idxName index名
+   * @return boolean
+   * @throws
+   * @since
+   */
+  public static boolean isExistsIndex(String idxName) throws Exception {
+    return restHighLevelClient.indices().exists(new GetIndexRequest(idxName), RequestOptions.DEFAULT);
+  }
+
+  public static void main(String[] aaa){
+    Map<String,String> eventEsData = new HashMap<>();
+    eventEsData.put("fff","666");
+
+    BulkRequest request = new BulkRequest();
+
+    request.add(new IndexRequest("eeeee3").source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
+
+    try {
+      BulkResponse bulk = restHighLevelClient.bulk(request, RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+//    System.out.println(1111111111);
+//    String indexName = "eeeee3";
+//    try {
+//      System.out.println(isExistsIndex(indexName));
+//      if (! isExistsIndex(indexName)){
+//        CreateIndexRequest request=new CreateIndexRequest(indexName);
+//        request.settings(Settings.builder().put("index.number_of_shards", "3").put("index.number_of_replicas", "1"));
+//
+//        Map<String, Object> message = new HashMap<>();
+//        message.put("type", "text");
+//        Map<String, Object> properties = new HashMap<>();
+//        properties.put("message", message);
+//        Map<String, Object> mapping = new HashMap<>();
+//        mapping.put("properties", properties);
+//        request.mapping(mapping);
+//
+//        try {
+//          CreateIndexResponse createIndexResponse = restHighLevelClient.indices().create(request, RequestOptions.DEFAULT);
+//          boolean acknowledged = createIndexResponse.isAcknowledged();
+//          boolean shardsAcknowledged = createIndexResponse.isShardsAcknowledged();
+//          if(acknowledged && shardsAcknowledged) {
+//            LOG.info("索引创建成功，index-name："+indexName);
+//          }
+//        } catch (IOException e) {
+//          LOG.error("索引创建失败，index-name："+indexName,e);
+//        }
+//      }
+//
+//    } catch (Exception e) {
+//      e.printStackTrace();
+//    }finally {
+//      try {
+//        restHighLevelClient.close();
+//      } catch (IOException e) {
+//        e.printStackTrace();
+//      }
+//    }
   }
 }
