@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.commons.lang.StringUtils;
 import org.apache.flume.Channel;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
@@ -38,7 +39,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -68,6 +72,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private int indexNumberOfShards;
 
   private int indexNumberOfReplicas;
+
+  // 需要转化时间格式的字段
+  private List<String> needDataFormatFieldNameList;
+
+  // 时间格式
+  private SimpleDateFormat dataFormat;
 
   // 每条完整数据被存入es后的对应列名
   private String completeDataFieldName;
@@ -349,6 +359,9 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       BulkRequest request = new BulkRequest();
 
       eventEsDataList.forEach(eventEsData->{
+        // 处理需要修改时间格式的字段
+        preDataFormat(eventEsData);
+
         request.add(new IndexRequest(esIndex).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
       });
 
@@ -363,6 +376,29 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       }
     }
     return true;
+  }
+
+  /**
+   * 按指定格式转化指定列的时间戳
+   * @param eventEsData
+   * @author Chen768959
+   * @date 2021/6/16 下午 7:11
+   * @return void
+   */
+  private void preDataFormat(Map<String, String> eventEsData) {
+    if (needDataFormatFieldNameList != null && dataFormat !=null){
+      needDataFormatFieldNameList.forEach(needDataFormatFieldName->{
+        String needDataFormatValue = eventEsData.get(needDataFormatFieldName);
+        if (StringUtils.isNotEmpty(needDataFormatValue)){
+          try {
+            Date date = new Date(Long.parseLong(needDataFormatValue));
+            eventEsData.put(needDataFormatFieldName, dataFormat.format(date));
+          }catch (Exception e){
+            LOG.error("时间格式转换异常，fieldName："+needDataFormatFieldName+"fieldValue："+needDataFormatValue, e);
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -444,6 +480,14 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     LOG.info("config解析index-number-of-shards："+indexNumberOfShards);
     indexNumberOfReplicas = context.getInteger("index-number-of-replicas");
     LOG.info("config解析index-number-of-replicas："+indexNumberOfReplicas);
+    String needDataFormatFieldNameListStr = context.getString("need-data-format-field-name-list");
+    if (needDataFormatFieldNameListStr!=null){
+      needDataFormatFieldNameList = Arrays.asList(needDataFormatFieldNameListStr.split("\\,"));
+    }
+    String dataFormatStr = context.getString("data-format");
+    if (dataFormatStr!=null){
+      dataFormat = new SimpleDateFormat(dataFormatStr);
+    }
 
     // 匹配es index 前缀和寻值规则
     try {
@@ -979,21 +1023,20 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   }
 
   public static void main(String[] aaa){
-    Map<String,String> eventEsData = new HashMap<>();
-    eventEsData.put("fff","666");
+//    Map<String,String> eventEsData = new HashMap<>();
+//    eventEsData.put("中文","666");
+//
+//    BulkRequest request = new BulkRequest();
+//
+//    request.add(new IndexRequest("eeeee3").source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
+//
+//    try {
+//      BulkResponse bulk = restHighLevelClient.bulk(request, RequestOptions.DEFAULT);
+//    } catch (IOException e) {
+//      e.printStackTrace();
+//    }
 
-    BulkRequest request = new BulkRequest();
-
-    request.add(new IndexRequest("eeeee3").source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
-
-    try {
-      BulkResponse bulk = restHighLevelClient.bulk(request, RequestOptions.DEFAULT);
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-
-//    System.out.println(1111111111);
-//    String indexName = "eeeee3";
+//    String indexName = "AAAA3";
 //    try {
 //      System.out.println(isExistsIndex(indexName));
 //      if (! isExistsIndex(indexName)){
