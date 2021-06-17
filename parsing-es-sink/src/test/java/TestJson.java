@@ -28,6 +28,8 @@ import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.settings.Settings;
 import org.junit.Test;
+import parsing_es_sink.ParsingEsManager;
+import parsing_es_sink.ParsingEsManagerSpecialImpl;
 import parsing_es_sink.ParsingEsSink;
 
 import java.io.IOException;
@@ -45,16 +47,15 @@ import java.util.Map;
  */
 public class TestJson {
   private static final String jsonStr = "";
-
   private static final String jsonData2 = "";
-
   private static final String jsonRule2 = "";
-
   private static final Map<String,String> speJsonRule2 = new HashMap<String, String>(){{
-    put("","");
-    put("","");
+    put("r1","");
+    put("r2","");
   }};
 
+  private static final String appData = "";
+  private static final String webData = "";
   private static final ObjectMapper objectMapper = new ObjectMapper();
   @Test
   public void test(){
@@ -180,7 +181,25 @@ public class TestJson {
 
     long startTime=System.currentTimeMillis();   //获取开始时间
     for (int i=0 ;i<1; i++){
-      List<Map<String, String>> maps = parsingEsSink.testAnalysis(eventBatch);
+      List<Map<String, Object>> maps = parsingEsSink.testAnalysis(eventBatch);
+      System.out.println(JSONArray.fromObject(maps).toString());
+    }
+
+    long endTime=System.currentTimeMillis(); //获取结束时间
+
+    System.out.println("程序运行时间： " + (endTime - startTime ) + "ms");
+  }
+
+  // 1w 928ms
+  @Test
+  public void analysisTest2() throws IOException {
+    ParsingEsManager parsingEsManager = new ParsingEsManagerSpecialImpl("index", "app");
+
+    JsonNode jsonNode = parsingEsManager.readTree(appData.getBytes());
+
+    long startTime=System.currentTimeMillis();   //获取开始时间
+    for (int i=0 ;i<1; i++){
+      List<Map<String, Object>> maps = parsingEsManager.getEventEsDataList(jsonNode);
       System.out.println(JSONArray.fromObject(maps).toString());
     }
 
@@ -229,8 +248,8 @@ public class TestJson {
   }
 
   public static void main(String[] aaa){
-//    Map<String,String> eventEsData = new HashMap<>();
-//    eventEsData.put("中文","666");
+//    Map<String,Object> eventEsData = new HashMap<>();
+//    eventEsData.put("intt",21312412);
 //
 //    BulkRequest request = new BulkRequest();
 //
@@ -242,7 +261,7 @@ public class TestJson {
 //      e.printStackTrace();
 //    }
 
-    String indexName = "AAAA3";
+    String indexName = "a-2";
     try {
       System.out.println(isExistsIndex(indexName));
       if (! isExistsIndex(indexName)){
@@ -255,6 +274,12 @@ public class TestJson {
         properties.put("message", message);
         Map<String, Object> mapping = new HashMap<>();
         mapping.put("properties", properties);
+        //设置时间格式
+        Map<String, Object> dateMessage = new HashMap<>();
+        dateMessage.put("type", "date");
+        dateMessage.put("format","yyyy-MM-dd HH:mm:ss||yyyy-MM-dd||epoch_millis");
+        //将时间字段与时间格式绑定
+        properties.put("dateeeee", dateMessage);
         request.mapping(mapping);
 
         try {

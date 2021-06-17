@@ -116,9 +116,10 @@ public class EsManager {
 
       for (BulkItemResponse bulkItemResponse : bulk.getItems()){
         if (bulkItemResponse.isFailed()){
+          LOG.error("写入es失败，msg："+bulkItemResponse.getFailureMessage());
           //删除刚刚写入的数据
-          rollbackBulkItemResponses(bulk.getItems(), esIndex);
-          return false;
+//          rollbackBulkItemResponses(bulk.getItems(), esIndex);
+//          return false;
         }
       }
     }
@@ -139,7 +140,8 @@ public class EsManager {
         if (StringUtils.isNotEmpty(needDataFormatValue)){
           try {
             Date date = new Date(Long.parseLong(needDataFormatValue));
-            eventEsData.put(needDataFormatFieldName, date);
+            String res = dataFormat.format(date);
+            eventEsData.put(needDataFormatFieldName, res);
           }catch (Exception e){
             LOG.error("时间格式转换异常，fieldName："+needDataFormatFieldName+"fieldValue："+needDataFormatValue, e);
           }

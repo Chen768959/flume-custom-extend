@@ -102,12 +102,12 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           try {
             res = esManager.addAllData(e.getValue(),e.getKey());
           } catch (IOException ioException) {
-            throw new RuntimeException("highLevelClient bulk add failed...will retry");
+            throw new RuntimeException("highLevelClient bulk add failed...will retry",ioException);
           }
 
           // 回退
           if (! res){
-            throw new RuntimeException("highLevelClient bulk add failed...will retry");
+            throw new RuntimeException("highLevelClient bulk add failed...will retry，存在数据发送失败");
           }
         });
 
@@ -178,27 +178,34 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
      * ================================================================================================
      * es解析工具配置
      */
-    // 匹配es index 前缀和寻值规则
-    String esIndexRule = context.getString("esIndexRule");
+    boolean Special = context.getBoolean("useParsingEsSpecial");
+    if (Special){
+      String indexPreStr = context.getString("indexPreStr");
+      String eventType = context.getString("eventType");
+      this.parsingEsManager = new ParsingEsManagerSpecialImpl(indexPreStr, eventType);
+    }else {
+      // 匹配es index 前缀和寻值规则
+      String esIndexRule = context.getString("esIndexRule");
 
-    // 匹配analysisJsonNodeRule
-    String analysisJsonNodeRule = context.getString("analysisJsonNodeRule");
+      // 匹配analysisJsonNodeRule
+      String analysisJsonNodeRule = context.getString("analysisJsonNodeRule");
 
-    // 匹配analysisValueJsonNodeRule
-    String analysisValueJsonNodeRuleGroup = context.getString("analysisValueJsonNodeRule");
-    Map<String, String> analysisValueJsonNodeRuleGroupMap = context.getSubProperties("analysisValueJsonNodeRule.");
-    Map<String, String> analysisValueJsonNodeRuleMap = null;
-    if (!analysisValueJsonNodeRuleGroupMap.isEmpty()) {
-      // key为rule1、rule2   value为规则
-      analysisValueJsonNodeRuleMap = selectByKeys(analysisValueJsonNodeRuleGroupMap,
-              analysisValueJsonNodeRuleGroup.split("\\s+"));
+      // 匹配analysisValueJsonNodeRule
+      String analysisValueJsonNodeRuleGroup = context.getString("analysisValueJsonNodeRule");
+      Map<String, String> analysisValueJsonNodeRuleGroupMap = context.getSubProperties("analysisValueJsonNodeRule.");
+      Map<String, String> analysisValueJsonNodeRuleMap = null;
+      if (!analysisValueJsonNodeRuleGroupMap.isEmpty()) {
+        // key为rule1、rule2   value为规则
+        analysisValueJsonNodeRuleMap = selectByKeys(analysisValueJsonNodeRuleGroupMap,
+                analysisValueJsonNodeRuleGroup.split("\\s+"));
+      }
+
+      // 全量数据名称
+      String completeDataFieldName = context.getString("complete-data-es-fname");
+
+      // 设置ParsingEsManager
+      this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRule, analysisJsonNodeRule, analysisValueJsonNodeRuleMap);
     }
-
-    // 全量数据名称
-    String completeDataFieldName = context.getString("complete-data-es-fname");
-
-    // 设置ParsingEsManager
-    this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRule, analysisJsonNodeRule, analysisValueJsonNodeRuleMap);
   }
 
   private Map<String, String> selectByKeys(Map<String, String> map, String[] keys) {
