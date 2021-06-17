@@ -9,11 +9,31 @@ import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.flume.Event;
 import org.apache.flume.event.SimpleEvent;
+import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestClientBuilder;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.indices.CreateIndexRequest;
+import org.elasticsearch.client.indices.CreateIndexResponse;
+import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.common.settings.Settings;
 import org.junit.Test;
-import per.cly.parsing_es_sink.ParsingEsSink;
+import parsing_es_sink.ParsingEsSink;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,15 +44,15 @@ import java.util.Map;
  * @date 2021/6/9
  */
 public class TestJson {
-  private static final String jsonStr = "{\"PAGES\":[],\"EVENTS\":[{\"PATH\":\"https://www.xxxxxxxxx.com/abc/defghsds/dfsd/sdfaLdew.html?mgdbId=12312313\",\"ETP\":2,\"EID\":\"weaffdasfasdgf\",\"TM\":13412343214124,\"EA\":[{\"EV\":\"https://www.xxxxxxx.com/sds/wqeqwewq/ewdsd/qweqwedqwdqw.html?mgdbId=123123123123\",\"EK\":\"url\"},{\"EV\":\"www.xxxxxxxxx.com\",\"EK\":\"dqwdqw\"},{\"EV\":\"测测测测\",\"EK\":\"title\"},{\"EV\":\"\",\"EK\":\"referrer\"},{\"EV\":\"2021-06-08 17:28\",\"EK\":\"timestamp\"},{\"EV\":\"Win\",\"EK\":\"os\"},{\"EV\":\"2131231231\",\"EK\":\"contentId\"},{\"EV\":\"\",\"EK\":\"promotionId\"},{\"EV\":\"ewdwedew\",\"EK\":\"product\"},{\"EV\":null,\"EK\":\"parameter1\"},{\"EV\":null,\"EK\":\"ks-udid\"},{\"EV\":null,\"EK\":\"ks-sessionid\"},{\"EV\":\"\",\"EK\":\"parameter2\"},{\"EV\":\"\",\"EK\":\"parameter3\"},{\"EV\":\"\",\"EK\":\"referer\"},{\"EV\":\"dewdwedaa\",\"EK\":\"app_from\"},{\"EV\":\"\",\"EK\":\"pageId\"},{\"EV\":\"213123124123123\",\"EK\":\"channelId\"},{\"EV\":\"\",\"EK\":\"account\"},{\"EV\":\"\",\"EK\":\"userId\"},{\"EV\":\"Chrome\",\"EK\":\"browser\"},{\"EV\":\"cdacasdfcasdfawefawefasfasdfasdfsadf\",\"EK\":\"sessionId\"},{\"EV\":0,\"EK\":\"platform\"},{\"EV\":\"12312312312231412423141234234\",\"EK\":\"busSessionId\"},{\"EV\":\"\",\"EK\":\"pageName\"},{\"EV\":\"\",\"EK\":\"blockName\"},{\"EV\":\"\",\"EK\":\"blockId\"},{\"EV\":\"\",\"EK\":\"positionIndex\"},{\"EV\":\"\",\"EK\":\"positionId\"},{\"EV\":\"\",\"EK\":\"positionName\"},{\"EV\":\"\",\"EK\":\"targetProgramId\"},{\"EV\":\"\",\"EK\":\"targetPageName\"},{\"EV\":\"\",\"EK\":\"uid\"},{\"EV\":\"234124234234234\",\"EK\":\"mgdbId\"},{\"EV\":\"WEB\",\"EK\":\"dataSource\"},{\"EV\":\"\",\"EK\":\"pwid\"},{\"EV\":\"23421342314\",\"EK\":\"program_id\"},{\"EV\":\"live\",\"EK\":\"videoType\"},{\"EV\":\"\",\"EK\":\"currentPageName\"},{\"EV\":\"\",\"EK\":\"currentPageId\"},{\"EV\":\"1\",\"EK\":\"mainsite\"},{\"EK\":\"needPromotion\"},{\"EV\":0,\"EK\":\"videoLength\"},{\"EV\":132423412,\"EK\":\"currentPoint\"},{\"EV\":3124234234,\"EK\":\"playDuration\"},{\"EV\":32413242,\"EK\":\"passbyDuration\"},{\"EV\":[],\"EK\":\"downloadTrace\"},{\"EV\":null,\"EK\":\"SubsessionServiceIP\"},{\"EV\":\"\",\"EK\":\"requestUrl\"},{\"EV\":3242.2342134324,\"EK\":\"bufferDuration\"},{\"EV\":0,\"EK\":\"m3u8DownLoadNum\"},{\"EV\":0,\"EK\":\"m3u8UpdateNum\"},{\"EV\":\"12342314234\",\"EK\":\"cid\"},{\"EV\":\"324234231412342342314234234\",\"EK\":\"playSessionId\"},{\"EV\":\"3\",\"EK\":\"rateType\"},{\"EV\":\"32412343214\",\"EK\":\"urlType\"},{\"EV\":\"https://wwwwwww.xxxxxxx.com:443/4324/324234234124dewdewd.flv?msisdn=ewfawefasdfasdfasdfasdgdsdaf&mdspid=&spid=424234&netType=0&sid=3214213423412&pid=324523543253&timestamp=3453425435435&Channel_ID=34253454353425345&ProgramID=34543534&ParentNodeID=-99&assertID=52345435435&client_ip=444.4.444.55&SecurityKey=412342342344&mvid=2141234124&mcid=1243214234&mpid=12342342134&playurlVersion=234123423dewdwe&userid=&jmhm=&videocodec=fewe&bean=fewfwe&encrypt=342342134123efwfdweweddew\\n\",\"EK\":\"playUrl\"},{\"EV\":\"333333\",\"EK\":\"version\"},{\"EV\":23423414123,\"EK\":\"liveEndTime\"},{\"EV\":null,\"EK\":\"currentFragSn\"},{\"EV\":2,\"EK\":\"streamType\"},{\"EV\":\"edwdwedwe\",\"EK\":\"type\"},{\"EV\":\"dewdwewqq\",\"EK\":\"ip\"},{\"EV\":\"e32ewqeqwde\",\"EK\":\"timestamp\"},{\"EV\":\"wqerqwerqwerwqer3241234123412342134\",\"EK\":\"cookieId\"},{\"EV\":\"https://www.dddwedede.com/eee/eeee/prd/ewrweqrweqr.html?mgdbId=3123432412342\",\"EK\":\"url\"},{\"EV\":\"www.dadasfdsfdsf.com\",\"EK\":\"efae\"},{\"EV\":\"反反复复\",\"EK\":\"title\"},{\"EV\":\"\",\"EK\":\"referrer\"},{\"EV\":3241234,\"EK\":\"screenHeight\"},{\"EV\":324234,\"EK\":\"screenWidth\"},{\"EV\":24,\"EK\":\"screenColorDepth\"},{\"EV\":\"zh-CN\",\"EK\":\"language\"},{\"EV\":\"dewdawedasdfasdfasdf2342134231423142314324dewd\",\"EK\":\"userAgent\"},{\"EV\":\"pc\",\"EK\":\"os\"}],\"NM\":\"\"}],\"PORT\":\"\",\"OS\":\"\",\"APPID\":\"9\",\"IP\":\"333.44421.334.55\",\"ISP\":\"单独\",\"UA\":\"\",\"PROV\":\"方法\",\"UDID\":\"\",\"SID\":\"ewfwqefweqfwqef32432142314dewwe\",\"IPLAT\":\"234.342\",\"WID\":\"ferfwaefsdafsaf3423rewfsdf\",\"IPLOC\":\"32432.432\",\"COUNTRY\":\"中国\",\"CITY\":\"西安\",\"UAG\":\"\",\"LG\":\"zh-cn\",\"TIMEZONE\":\"-8\",\"UAGV\":\"\"}";
+  private static final String jsonStr = "";
 
   private static final String jsonData2 = "";
 
   private static final String jsonRule2 = "";
 
   private static final Map<String,String> speJsonRule2 = new HashMap<String, String>(){{
-    put("r1","");
-    put("r2","");
+    put("","");
+    put("","");
   }};
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -151,7 +171,7 @@ public class TestJson {
   @Test
   public void analysisTest(){
     ParsingEsSink parsingEsSink = new ParsingEsSink();
-    parsingEsSink.testInit("completeNAME", jsonRule2,speJsonRule2);
+    parsingEsSink.testInit("completeNAME","{\"DevInfo\":{\"APPID\":\"appid_\"}}", jsonRule2,speJsonRule2);
 
     List<Event> eventBatch = new ArrayList<>();
     Event event = new SimpleEvent();
@@ -159,8 +179,9 @@ public class TestJson {
     eventBatch.add(event);
 
     long startTime=System.currentTimeMillis();   //获取开始时间
-    for (int i=0 ;i<10000; i++){
+    for (int i=0 ;i<1; i++){
       List<Map<String, String>> maps = parsingEsSink.testAnalysis(eventBatch);
+      System.out.println(JSONArray.fromObject(maps).toString());
     }
 
     long endTime=System.currentTimeMillis(); //获取结束时间
@@ -168,4 +189,94 @@ public class TestJson {
     System.out.println("程序运行时间： " + (endTime - startTime ) + "ms");
   }
 
+  @Test
+  public void format(){
+    String format = "yyyy-MM-dd HH:mm:ss";
+    String etm = "1623144244889";
+
+    SimpleDateFormat simpleDateFormat = new SimpleDateFormat(format);
+    Date date = new Date(Long.parseLong(etm));
+    String res = simpleDateFormat.format(date);
+    System.out.println(res);
+  }
+
+  private static RestHighLevelClient restHighLevelClient;
+
+  static {
+    final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+    credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("elastic", "operation"));
+    RestClientBuilder restClientBuilder = RestClient.builder(new HttpHost("192.168.209.128", 9200, "http"))
+            .setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
+              @Override
+              public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpAsyncClientBuilder) {
+                return httpAsyncClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+              }
+            });
+    restHighLevelClient = new RestHighLevelClient(restClientBuilder);
+  }
+
+
+  /**
+   * 判断某个index是否存在
+   *
+   * @param idxName index名
+   * @return boolean
+   * @throws
+   * @since
+   */
+  public static boolean isExistsIndex(String idxName) throws Exception {
+    return restHighLevelClient.indices().exists(new GetIndexRequest(idxName), RequestOptions.DEFAULT);
+  }
+
+  public static void main(String[] aaa){
+//    Map<String,String> eventEsData = new HashMap<>();
+//    eventEsData.put("中文","666");
+//
+//    BulkRequest request = new BulkRequest();
+//
+//    request.add(new IndexRequest("eeeee3").source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
+//
+//    try {
+//      BulkResponse bulk = restHighLevelClient.bulk(request, RequestOptions.DEFAULT);
+//    } catch (IOException e) {
+//      e.printStackTrace();
+//    }
+
+    String indexName = "AAAA3";
+    try {
+      System.out.println(isExistsIndex(indexName));
+      if (! isExistsIndex(indexName)){
+        CreateIndexRequest request=new CreateIndexRequest(indexName);
+        request.settings(Settings.builder().put("index.number_of_shards", "3").put("index.number_of_replicas", "1"));
+
+        Map<String, Object> message = new HashMap<>();
+        message.put("type", "text");
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("message", message);
+        Map<String, Object> mapping = new HashMap<>();
+        mapping.put("properties", properties);
+        request.mapping(mapping);
+
+        try {
+          CreateIndexResponse createIndexResponse = restHighLevelClient.indices().create(request, RequestOptions.DEFAULT);
+          boolean acknowledged = createIndexResponse.isAcknowledged();
+          boolean shardsAcknowledged = createIndexResponse.isShardsAcknowledged();
+          if(acknowledged && shardsAcknowledged) {
+            System.out.println("索引创建成功，index-name："+indexName);
+          }
+        } catch (IOException e) {
+          System.out.println("索引创建失败，index-name："+indexName);
+        }
+      }
+
+    } catch (Exception e) {
+      e.printStackTrace();
+    }finally {
+      try {
+        restHighLevelClient.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+  }
 }
