@@ -28,7 +28,7 @@ public interface ParsingEsManager {
    * @date 2021/6/17 上午 11:13
    * @return java.util.List<java.util.Map<java.lang.String,java.lang.String>>
    */
-  List<Map<String,String>> getEventEsDataList(JsonNode eventJsonNode);
+  List<Map<String,Object>> getEventEsDataList(JsonNode eventJsonNode);
 
   /**
    * 根据eventJsonNode获取索引名

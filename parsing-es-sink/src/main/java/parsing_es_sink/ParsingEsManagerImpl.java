@@ -126,11 +126,11 @@ public class ParsingEsManagerImpl implements ParsingEsManager{
    * @return java.util.List<java.util.Map<java.lang.String,java.lang.String>> 一个map对象就是一条待写入数据
    */
   @Override
-  public List<Map<String, String>> getEventEsDataList(JsonNode eventJsonNode) {
-    List<Map<String, String>> eventEsDataList = new ArrayList<>();
+  public List<Map<String, Object>> getEventEsDataList(JsonNode eventJsonNode) {
+    List<Map<String, Object>> eventEsDataList = new ArrayList<>();
 
     // 解析此event的公共属性
-    Map<String, String> commonFieldMap = new HashMap<>();
+    Map<String, Object> commonFieldMap = new HashMap<>();
     putCommonDataToMap(analysisJsonNodeRule, eventJsonNode, commonFieldMap);
 
     // 如果此event有array规则，则解析array中的每一个对象的属性，
@@ -158,7 +158,7 @@ public class ParsingEsManagerImpl implements ParsingEsManager{
         // 3.接着遍历newArr，解析每一个结果，
         // 解析数组中的每个待解析数据为新map
         for (JsonNode eventJsonNodeForArr : newEventArrJsonNode){
-          Map<String, String> arrFieldMap = new HashMap<>();
+          Map<String, Object> arrFieldMap = new HashMap<>();
           putCommonDataToMap(analysisJsonNodeArrRule, eventJsonNodeForArr, arrFieldMap);
           arrFieldMap.putAll(commonFieldMap);
 
@@ -228,7 +228,7 @@ public class ParsingEsManagerImpl implements ParsingEsManager{
    * @return void
    */
   private void putCommonDataToMap(JsonNode analysisJsonNodeConf, JsonNode eventJsonNode,
-                                  Map<String, String> resultEsDataMap) {
+                                  Map<String, Object> resultEsDataMap) {
     Iterator<Map.Entry<String, JsonNode>> eventRules = analysisJsonNodeConf.fields();
 
     while (eventRules.hasNext()){

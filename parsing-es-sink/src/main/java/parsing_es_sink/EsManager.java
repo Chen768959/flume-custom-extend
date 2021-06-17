@@ -88,7 +88,7 @@ public class EsManager {
    * @date 2021/6/9 下午 6:16
    * @return boolean 写入成功返回true
    */
-  public boolean addAllData(List<Map<String, String>> eventEsDataList, String esIndex) throws IOException {
+  public boolean addAllData(List<Map<String, Object>> eventEsDataList, String esIndex) throws IOException {
     if (!Optional.ofNullable(eventEsDataList).orElse(new ArrayList<>()).isEmpty()){
       // 判断index是否存在
       GetIndexRequest getIndexRequest=new GetIndexRequest(esIndex);
@@ -132,14 +132,14 @@ public class EsManager {
    * @date 2021/6/16 下午 7:11
    * @return void
    */
-  private void preDataFormat(Map<String, String> eventEsData) {
+  private void preDataFormat(Map<String, Object> eventEsData) {
     if (needDataFormatFieldNameList != null && dataFormat !=null){
       needDataFormatFieldNameList.forEach(needDataFormatFieldName->{
-        String needDataFormatValue = eventEsData.get(needDataFormatFieldName);
+        String needDataFormatValue = (String) eventEsData.get(needDataFormatFieldName);
         if (StringUtils.isNotEmpty(needDataFormatValue)){
           try {
             Date date = new Date(Long.parseLong(needDataFormatValue));
-            eventEsData.put(needDataFormatFieldName, dataFormat.format(date));
+            eventEsData.put(needDataFormatFieldName, date);
           }catch (Exception e){
             LOG.error("时间格式转换异常，fieldName："+needDataFormatFieldName+"fieldValue："+needDataFormatValue, e);
           }
@@ -163,6 +163,16 @@ public class EsManager {
     message.put("type", "text");
     Map<String, Object> properties = new HashMap<>();
     properties.put("message", message);
+    if (needDataFormatFieldNameList != null){
+      needDataFormatFieldNameList.forEach(needDataFormatFieldName->{
+        //设置时间格式
+        Map<String, Object> dateMessage = new HashMap<>();
+        dateMessage.put("type", "date");
+        dateMessage.put("format","yyyy-MM-dd HH:mm:ss||yyyy-MM-dd||epoch_millis");
+        //将时间字段与时间格式绑定
+        properties.put(needDataFormatFieldName, dateMessage);
+      });
+    }
     Map<String, Object> mapping = new HashMap<>();
     mapping.put("properties", properties);
     request.mapping(mapping);

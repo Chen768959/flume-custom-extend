@@ -71,7 +71,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
 
         // 获取待存入es的数据集
         // key是index，value为待写入数据
-        Map<String,List<Map<String, String>>> eventEsDataListMap = new HashMap<>();
+        Map<String,List<Map<String, Object>>> eventEsDataListMap = new HashMap<>();
 
         for (Event event : eventBatch){
           byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
@@ -79,13 +79,13 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           try {
             JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
 
-            List<Map<String,String>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
+            List<Map<String,Object>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
 
             //计算index
             String esIndex = parsingEsManager.getEsIndex(eventJsonNode);
 
             // 合并相同index的数据，后续同index的数据会批量提交
-            List<Map<String, String>> eventEsDataList = eventEsDataListMap.get(esIndex);
+            List<Map<String, Object>> eventEsDataList = eventEsDataListMap.get(esIndex);
             if (eventEsDataList == null){
               eventEsDataListMap.put(esIndex, eventEsDataListForEvent);
             }else {
@@ -236,8 +236,8 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRuleStr, analysisRule, analysisValueJsonNodeRuleMap);
   }
 
-  public List<Map<String, String>> testAnalysis(List<Event> eventBatch){
-    List<Map<String, String>> eventEsDataList = new ArrayList<>();
+  public List<Map<String, Object>> testAnalysis(List<Event> eventBatch){
+    List<Map<String, Object>> eventEsDataList = new ArrayList<>();
 
     for (Event event : eventBatch){
       byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
@@ -245,7 +245,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
       try {
         JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
 
-        List<Map<String,String>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
+        List<Map<String,Object>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
 
         eventEsDataList.addAll(eventEsDataListForEvent);
 
