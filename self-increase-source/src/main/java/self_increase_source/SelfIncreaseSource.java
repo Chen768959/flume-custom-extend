@@ -60,6 +60,8 @@ public class SelfIncreaseSource extends AbstractSource implements Configurable, 
 
     // 每次处理完后时间
     intervalMs = context.getInteger("interval-ms", 2000);
+
+    increaseFactory = new IncreaseFactoryDef();
   }
 
   @Override
