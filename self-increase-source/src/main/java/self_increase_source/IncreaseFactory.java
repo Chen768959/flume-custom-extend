@@ -1,5 +1,6 @@
 package self_increase_source;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flume.Event;
 
 import java.util.List;
@@ -16,5 +17,5 @@ public interface IncreaseFactory {
    * @date 2021/6/19 下午 7:04
    * @return java.util.List<org.apache.flume.Event>
    */
-  List<Event> increaseEvents(int increaseNum);
+  List<Event> increaseEvents(int increaseNum) throws JsonProcessingException;
 }

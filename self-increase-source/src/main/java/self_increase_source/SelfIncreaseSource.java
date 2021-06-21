@@ -61,7 +61,18 @@ public class SelfIncreaseSource extends AbstractSource implements Configurable, 
     // 每次处理完后时间
     intervalMs = context.getInteger("interval-ms", 2000);
 
-    increaseFactory = new IncreaseFactoryDef();
+    String appType = context.getString("data-type", "app");
+
+    switch (appType){
+      case "app":
+        increaseFactory = new IncreaseFactoryAppDataDef();
+        break;
+      case "web":
+        increaseFactory = new IncreaseFactoryWebDataDef();
+        break;
+      default:
+        throw new RuntimeException("data-type参数异常，当前支持参数：“app”、“web”");
+    }
   }
 
   @Override
