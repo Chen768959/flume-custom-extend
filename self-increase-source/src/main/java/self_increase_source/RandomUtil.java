@@ -40,7 +40,54 @@ public class RandomUtil {
     return Long.toString(nowTime);
   }
 
+  public static String getEKtype(){
+    switch (random.nextInt(3)){
+      case 0:
+        return "60000000";
+      case 1:
+        return "56000004";
+      case 2:
+        return "event";
+    }
+
+    return "event";
+  }
+  public static String get65EID(){
+    switch (random.nextInt(2)){
+      case 0:
+        return "60000000";
+      case 1:
+        return "56000004";
+    }
+
+    return "60000000";
+  }
+
   public static String getPid(){
+    return "TEST";
+  }
+
+  public static String getPageId(){
+    return "TEST";
+  }
+
+  public static String getSubsessionServiceURL(){
+    return "TEST";
+  }
+
+  public static String getMG_MSG_PROGRAM_URL(){
+    return "TEST";
+  }
+
+  public static String getEVtype(){
+    return "TEST";
+  }
+
+  public static String getGroupId(){
+    return "TEST";
+  }
+
+  public static String getMgdbId(){
     return "TEST";
   }
 }

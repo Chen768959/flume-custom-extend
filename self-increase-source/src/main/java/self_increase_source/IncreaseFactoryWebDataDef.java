@@ -86,15 +86,7 @@ public class IncreaseFactoryWebDataDef implements IncreaseFactory{
   }
 
   private void makingRandom() {
-    String uuid = RandomUtil.getUuid();
 
-    this.entrySID.setValue(uuid);
-    this.entryWID.setValue(uuid);
-    this.entryEVENTS_TM.setValue(RandomUtil.getTime());
-    this.entryEVENTS_EA_cookieId.setValue(RandomUtil.getUuid());
-    this.entryEVENTS_EA_playSessionId.setValue(RandomUtil.getUuid());
-    this.entryEVENTS_EA_contentId.setValue(RandomUtil.getPid());
-    this.entryEVENTS_EA_program_id.setValue(RandomUtil.getPid());
   }
 
   private byte[] getJsonData() throws JsonProcessingException {
