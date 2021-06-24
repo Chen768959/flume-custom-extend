@@ -106,8 +106,9 @@ public class AppData3 extends BaseData implements Data{
       }});
     }};
 
-    this.entryDI = getEntryByKey(appData,"DI");
-    this.entryUDID = getEntryByKey(appData,"UDID");
+    HashMap<String,Object> devInfo = (HashMap<String,Object>)appData.get("DevInfo");
+    this.entryDI = getEntryByKey(devInfo,"DI");
+    this.entryUDID = getEntryByKey(devInfo,"UDID");
 
     Map<String, Object> eventsMap = getArrByKey(appData, "Events").get(0);
     this.entryEvents_OCID = getEntryByKey(eventsMap,"OCID");
@@ -120,8 +121,11 @@ public class AppData3 extends BaseData implements Data{
     this.mapEvents_TDT_data = (Map<String, Object>) getEntryByEK(tdt, "data").getValue();
     this.entryEvents_TDT_data_sdkSessionInfo_udid = getEntryByKey((Map<String, Object>)mapEvents_TDT_data.get("sdkSessionInfo"), "udid");
     this.entryEvents_TDT_data_sdkSessionInfo_account = getEntryByKey((Map<String, Object>)mapEvents_TDT_data.get("sdkSessionInfo"), "account");
-    Map<String, Object> action = (Map<String, Object>) ((Map<String, Object>) ((ArrayList<Map<String, Object>>) mapEvents_TDT_data.
-            get("sdkSessionInfo")).get(0).get("eventParams")).get("action");
+    Map<String, Object> action = (Map<String, Object>)
+                                          ((Map<String, Object>)
+                                              ((ArrayList<Map<String, Object>>) mapEvents_TDT_data.get("customEvent"))
+                                                      .get(0).get("eventParams"))
+                                                            .get("action");
     this.entryEvents_TDT_data_customEvent_type = getEntryByKey(action,"type");
     Map<String, Object> params = (Map<String, Object>)action.get("params");
     this.entryEvents_TDT_data_customEvent_params_contentId = getEntryByKey(params,"contentId");

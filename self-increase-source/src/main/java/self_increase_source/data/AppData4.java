@@ -95,8 +95,9 @@ public class AppData4 extends BaseData implements Data{
       }});
     }};
 
-    this.entryDI = getEntryByKey(appData,"DI");
-    this.entryUDID = getEntryByKey(appData,"UDID");
+    HashMap<String,Object> devInfo = (HashMap<String,Object>)appData.get("DevInfo");
+    this.entryDI = getEntryByKey(devInfo,"DI");
+    this.entryUDID = getEntryByKey(devInfo,"UDID");
 
     Map<String, Object> eventsMap = getArrByKey(appData, "Events").get(0);
     this.entryEvents_OCID = getEntryByKey(eventsMap,"OCID");
