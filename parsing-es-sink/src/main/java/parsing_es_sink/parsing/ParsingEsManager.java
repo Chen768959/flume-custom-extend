@@ -1,5 +1,6 @@
-package parsing_es_sink;
+package parsing_es_sink.parsing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
@@ -22,20 +23,13 @@ public interface ParsingEsManager {
   JsonNode readTree(byte[] eventBody) throws IOException;
 
   /**
-   * 将eventJsonNode转化成待存入es的map数据，每一个map就是一条数据
+   * 将eventJsonNode转化成待存入es的map数据，每一个map就是一条数据，
+   * 然后解析出该条数据写入的index。并放入总map
    * @param eventJsonNode
+   * @param eventEsDataListMap key是index，value为待写入数据
    * @author Chen768959
-   * @date 2021/6/17 上午 11:13
-   * @return java.util.List<java.util.Map<java.lang.String,java.lang.String>>
+   * @date 2021/7/8 下午 3:37
+   * @return void
    */
-  List<Map<String,Object>> getEventEsDataList(JsonNode eventJsonNode);
-
-  /**
-   * 根据eventJsonNode获取索引名
-   * @param eventJsonNode
-   * @author Chen768959
-   * @date 2021/6/17 上午 11:15
-   * @return java.lang.String
-   */
-  String getEsIndex(JsonNode eventJsonNode);
+  void getEventEsDataList(JsonNode eventJsonNode, Map<String,List<Map<String, Object>>> eventEsDataListMap) throws JsonProcessingException;
 }

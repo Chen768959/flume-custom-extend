@@ -13,6 +13,9 @@ import org.apache.flume.sink.AbstractSink;
 import org.apache.http.HttpHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import parsing_es_sink.parsing.ParsingEsManager;
+import parsing_es_sink.parsing.ParsingManagerSpecialAppImpl;
+import parsing_es_sink.parsing.ParsingManagerSpecialWebImpl;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -30,7 +33,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   private static final Logger LOG = LoggerFactory.getLogger(ParsingEsSink.class);
 
   // es管理工具
-  private EsManager esManager;
+  private EsManager641 esManager;
 
   // 解析工具
   private ParsingEsManager parsingEsManager;
@@ -79,18 +82,8 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           try {
             JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
 
-            List<Map<String,Object>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
+            parsingEsManager.getEventEsDataList(eventJsonNode, eventEsDataListMap);
 
-            //计算index
-            String esIndex = parsingEsManager.getEsIndex(eventJsonNode);
-
-            // 合并相同index的数据，后续同index的数据会批量提交
-            List<Map<String, Object>> eventEsDataList = eventEsDataListMap.get(esIndex);
-            if (eventEsDataList == null){
-              eventEsDataListMap.put(esIndex, eventEsDataListForEvent);
-            }else {
-              eventEsDataList.addAll(eventEsDataListForEvent);
-            }
           }catch (Exception e){
             LOG.error("解析event json异常，event_body："+new String(eventBody), e);
           }
@@ -170,7 +163,7 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     }
 
     // 设置es参数
-    this.esManager = new EsManager();
+    this.esManager = new EsManager641();
     esManager.initEs(userName, password, httpHosts, needDataFormatFieldNameList,
             dataFormat, indexNumberOfShards, indexNumberOfReplicas);
 
@@ -182,29 +175,36 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     if (Special){
       String indexPreStr = context.getString("indexPreStr");
       String eventType = context.getString("eventType");
-      this.parsingEsManager = new ParsingEsManagerSpecialImpl(indexPreStr, eventType);
+      if ("app".equals(eventType)){
+        this.parsingEsManager = new ParsingManagerSpecialAppImpl(indexPreStr);
+    }else if ("web".equals(eventType)){
+        this.parsingEsManager = new ParsingManagerSpecialWebImpl(indexPreStr);
     }else {
-      // 匹配es index 前缀和寻值规则
-      String esIndexRule = context.getString("esIndexRule");
+      new RuntimeException("eventType异常，只支持'app'和'web'两种解析类型");
+    }
 
-      // 匹配analysisJsonNodeRule
-      String analysisJsonNodeRule = context.getString("analysisJsonNodeRule");
-
-      // 匹配analysisValueJsonNodeRule
-      String analysisValueJsonNodeRuleGroup = context.getString("analysisValueJsonNodeRule");
-      Map<String, String> analysisValueJsonNodeRuleGroupMap = context.getSubProperties("analysisValueJsonNodeRule.");
-      Map<String, String> analysisValueJsonNodeRuleMap = null;
-      if (!analysisValueJsonNodeRuleGroupMap.isEmpty()) {
-        // key为rule1、rule2   value为规则
-        analysisValueJsonNodeRuleMap = selectByKeys(analysisValueJsonNodeRuleGroupMap,
-                analysisValueJsonNodeRuleGroup.split("\\s+"));
-      }
-
-      // 全量数据名称
-      String completeDataFieldName = context.getString("complete-data-es-fname");
-
-      // 设置ParsingEsManager
-      this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRule, analysisJsonNodeRule, analysisValueJsonNodeRuleMap);
+    }else {
+//      // 匹配es index 前缀和寻值规则
+//      String esIndexRule = context.getString("esIndexRule");
+//
+//      // 匹配analysisJsonNodeRule
+//      String analysisJsonNodeRule = context.getString("analysisJsonNodeRule");
+//
+//      // 匹配analysisValueJsonNodeRule
+//      String analysisValueJsonNodeRuleGroup = context.getString("analysisValueJsonNodeRule");
+//      Map<String, String> analysisValueJsonNodeRuleGroupMap = context.getSubProperties("analysisValueJsonNodeRule.");
+//      Map<String, String> analysisValueJsonNodeRuleMap = null;
+//      if (!analysisValueJsonNodeRuleGroupMap.isEmpty()) {
+//        // key为rule1、rule2   value为规则
+//        analysisValueJsonNodeRuleMap = selectByKeys(analysisValueJsonNodeRuleGroupMap,
+//                analysisValueJsonNodeRuleGroup.split("\\s+"));
+//      }
+//
+//      // 全量数据名称
+//      String completeDataFieldName = context.getString("complete-data-es-fname");
+//
+//      // 设置ParsingEsManager
+//      this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRule, analysisJsonNodeRule, analysisValueJsonNodeRuleMap);
     }
   }
 
@@ -236,31 +236,28 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   /**
    * TEST=========================================================================================================
    */
-
-  // 加载规则以及其中数组规则
-  public void testInit(String completeDataFieldName, String esIndexRuleStr, String analysisRule, Map<String, String> analysisValueJsonNodeRuleMap){
-
-    this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRuleStr, analysisRule, analysisValueJsonNodeRuleMap);
-  }
-
-  public List<Map<String, Object>> testAnalysis(List<Event> eventBatch){
-    List<Map<String, Object>> eventEsDataList = new ArrayList<>();
-
-    for (Event event : eventBatch){
-      byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
-
-      try {
-        JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
-
-        List<Map<String,Object>> eventEsDataListForEvent = parsingEsManager.getEventEsDataList(eventJsonNode);
-
-        eventEsDataList.addAll(eventEsDataListForEvent);
-
-      }catch (Exception e){
-        throw new RuntimeException(e);
-      }
-    }
-
-    return eventEsDataList;
-  }
+//
+//  // 加载规则以及其中数组规则
+//  public void testInit(String completeDataFieldName, String esIndexRuleStr, String analysisRule, Map<String, String> analysisValueJsonNodeRuleMap){
+//
+//    this.parsingEsManager = new ParsingEsManagerImpl(completeDataFieldName, esIndexRuleStr, analysisRule, analysisValueJsonNodeRuleMap);
+//  }
+//
+//  public List<Map<String, Object>> testAnalysis(List<Event> eventBatch){
+//    Map<String,List<Map<String, Object>>> eventEsDataList = new HashMap<>();
+//
+//    for (Event event : eventBatch){
+//      byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
+//
+//      try {
+//        JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
+//
+//        parsingEsManager.getEventEsDataList(eventJsonNode,eventEsDataList);
+//      }catch (Exception e){
+//        throw new RuntimeException(e);
+//      }
+//    }
+//
+//    return eventEsDataList.values().iterator().next();
+//  }
 }
