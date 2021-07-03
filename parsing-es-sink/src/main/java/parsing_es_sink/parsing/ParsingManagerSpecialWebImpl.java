@@ -53,7 +53,7 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
               // 解析TDT中的每一项，并将其转换为k-v格式
               for (JsonNode tdtNodeForArr : (ArrayNode)eaNode){
                 String ek = getText(tdtNodeForArr, "EK");
-                String ev = getText(tdtNodeForArr, "EK");
+                String ev = getText(tdtNodeForArr, "EV");
 
                 eventTDT.put(ek,ev);
 

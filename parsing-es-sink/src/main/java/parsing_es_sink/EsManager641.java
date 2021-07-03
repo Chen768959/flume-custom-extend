@@ -8,6 +8,7 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * 管理es连接
@@ -109,7 +111,6 @@ public class EsManager641 {
         LOG.error("判断index是否存在失败",e);
       }
 
-
       BulkRequest request = new BulkRequest();
 
 
@@ -117,7 +118,7 @@ public class EsManager641 {
         // 处理需要修改时间格式的字段
         preDataFormat(eventEsData);
 
-        request.add(new IndexRequest(esIndex, "_doc",esIndex).source(eventEsData));
+        request.add(new IndexRequest(esIndex, "_doc", UUID.randomUUID().toString()).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
       });
 
       try {
@@ -234,7 +235,7 @@ public class EsManager641 {
 
               .startObject("etm")
               .field("type", "date")
-              .field("format", "yyyy-MM-dd HH:mm:ss")
+              .field("format", "yyyy/MM/dd HH:mm:ss")
               .endObject()
 
               .endObject()
