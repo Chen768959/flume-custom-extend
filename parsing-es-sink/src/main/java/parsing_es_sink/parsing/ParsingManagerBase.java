@@ -22,6 +22,6 @@ public abstract class ParsingManagerBase implements ParsingEsManager {
     if (jsonNode!=null){
       return jsonNode.asText();
     }
-    return "NULL";
+    return "";
   }
 }

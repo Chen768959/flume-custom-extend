@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * @author Chen768959
@@ -30,7 +31,7 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
     Map<String, Object> eventEsCommonData = new HashMap<>();
     // 解析通常参数
     eventEsCommonData.put(Constants.getInstance().getIp(),getText(eventJsonNode, "IP"));
-    eventEsCommonData.put(Constants.getInstance().getIp(),getText(eventJsonNode, "APPID"));
+    eventEsCommonData.put(Constants.getInstance().getAppid(),getText(eventJsonNode, "APPID"));
 
     // 解析数组参数
     JsonNode eventsNode = eventJsonNode.get("EVENTS");
@@ -72,8 +73,8 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
 
           // 设置devinfo
           eventEsForArrData.put(Constants.getInstance().getDevinfo(),new HashMap<String,Object>(){{
-            put("PHONE",eventEsForArrData.get(Constants.getInstance().getPhoneNum()));
-            put("IP",eventEsForArrData.get(Constants.getInstance().getIp()));
+            put("PHONE", Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getPhoneNum())).orElse(""));
+            put("IP",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getIp())).orElse(""));
           }});
 
           // 寻找index，并设置
@@ -96,6 +97,16 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
           }
         }
       }
+    }
+  }
+
+  @Override
+  public boolean checkFormat(JsonNode eventJsonNode) {
+    JsonNode eventsNode = eventJsonNode.get("EVENTS");
+    if (eventsNode != null){
+      return true;
+    }else {
+      return false;
     }
   }
 }

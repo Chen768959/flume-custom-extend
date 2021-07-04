@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * @author Chen768959
@@ -47,15 +48,19 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
         switch (dvType){
           case ANDROID_10_PRO:
             String[] dis = getText(devInfoNode, "DI").split("\\-");
-            eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis[dis.length-1]);
+            if (dis.length>0){
+              eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis[dis.length-1]);
 
-            eventEsCommonData.put(Constants.getInstance().getIdfa(),dis[0]);
+              eventEsCommonData.put(Constants.getInstance().getIdfa(),dis[0]);
 
-            eventEsCommonData.put(Constants.getInstance().getOaid(),dis[0]);
+              eventEsCommonData.put(Constants.getInstance().getOaid(),dis[0]);
+            }
             break;
           case ANDROID_10_DOWN:
             String[] dis2 = getText(devInfoNode, "DI").split("\\-");
-            eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis2[dis2.length-1]);
+            if (dis2.length>0){
+              eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis2[dis2.length-1]);
+            }
             break;
           case IOS:
             eventEsCommonData.put(Constants.getInstance().getIdfa(),getText(devInfoNode,"IDFA"));
@@ -104,13 +109,14 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
 
           // 设置devinfo
           eventEsForArrData.put(Constants.getInstance().getDevinfo(),new HashMap<String,Object>(){{
-            put("IMEI1",eventEsForArrData.get(Constants.getInstance().getImei()));
-            put("UDID",eventEsForArrData.get(Constants.getInstance().getUdid()));
-            put("IMSI1",eventEsForArrData.get(Constants.getInstance().getImsi()));
-            put("ANDROID",eventEsForArrData.get(Constants.getInstance().getAndroidID()));
-            put("IDFA",eventEsForArrData.get(Constants.getInstance().getIdfa()));
-            put("PHONE",eventEsForArrData.get(Constants.getInstance().getPhoneNum()));
-            put("IP",eventEsForArrData.get(Constants.getInstance().getIp()));
+            put("IMEI1", Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getImei())).orElse(""));
+            put("UDID",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getUdid())).orElse(""));
+            put("IMSI1",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getImsi())).orElse(""));
+            put("ANDROID",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getAndroidID())).orElse(""));
+            put("IDFA",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getIdfa())).orElse(""));
+            put("PHONE",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getPhoneNum())).orElse(""));
+            put("IP",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getIp())).orElse(""));
+            put("CHANNEL",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getChannel())).orElse(""));
           }});
 
           // 寻找index，并设置
@@ -133,6 +139,17 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
           }
         }
       }
+    }
+  }
+
+  @Override
+  public boolean checkFormat(JsonNode eventJsonNode) {
+    JsonNode devInfoNode = eventJsonNode.get("DevInfo");
+    JsonNode eventsNode = eventJsonNode.get("Events");
+    if (devInfoNode != null && eventsNode != null){
+      return true;
+    }else {
+      return false;
     }
   }
 

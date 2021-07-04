@@ -35,13 +35,11 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
   // es管理工具
   private EsManager641 esManager;
 
-  // 解析工具
-  private ParsingEsManager parsingEsManager;
-
-
-
   // 一次从channel中取出的event数
   private int batchSize;
+
+  private ParsingEsManager parsingAppEsManager;
+  private ParsingEsManager parsingWebEsManager;
 
   public Status process() throws EventDeliveryException {
     Status status = Status.READY;
@@ -80,10 +78,15 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
           byte[] eventBody = event.getBody(); // 一个event中会包含多个需要被解析的事件数据
 
           try {
-            JsonNode eventJsonNode = parsingEsManager.readTree(eventBody);
+            JsonNode eventJsonNode = parsingAppEsManager.readTree(eventBody);
 
-            parsingEsManager.getEventEsDataList(eventJsonNode, eventEsDataListMap);
-
+            if (parsingAppEsManager.checkFormat(eventJsonNode)){
+              parsingAppEsManager.getEventEsDataList(eventJsonNode, eventEsDataListMap);
+            }else if (parsingWebEsManager.checkFormat(eventJsonNode)){
+              parsingWebEsManager.getEventEsDataList(eventJsonNode, eventEsDataListMap);
+            }else {
+              LOG.error("原数据格式异常无法解析："+new String(eventBody));
+            }
           }catch (Exception e){
             LOG.error("解析event json异常，event_body："+new String(eventBody), e);
           }
@@ -174,15 +177,9 @@ public class ParsingEsSink extends AbstractSink implements Configurable {
     boolean Special = context.getBoolean("useParsingEsSpecial");
     if (Special){
       String indexPreStr = context.getString("indexPreStr");
-      String eventType = context.getString("eventType");
-      if ("app".equals(eventType)){
-        this.parsingEsManager = new ParsingManagerSpecialAppImpl(indexPreStr);
-    }else if ("web".equals(eventType)){
-        this.parsingEsManager = new ParsingManagerSpecialWebImpl(indexPreStr);
-    }else {
-      new RuntimeException("eventType异常，只支持'app'和'web'两种解析类型");
-    }
 
+      this.parsingAppEsManager = new ParsingManagerSpecialAppImpl(indexPreStr);
+      this.parsingWebEsManager = new ParsingManagerSpecialWebImpl(indexPreStr);
     }else {
 //      // 匹配es index 前缀和寻值规则
 //      String esIndexRule = context.getString("esIndexRule");

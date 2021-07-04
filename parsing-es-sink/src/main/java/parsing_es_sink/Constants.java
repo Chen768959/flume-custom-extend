@@ -1,10 +1,13 @@
 package parsing_es_sink;
 
+import java.util.UUID;
+
 /**
  * @author Chen768959
  * @date 2021/7/6
  */
 public class Constants {
+  private int i=0;
 
   private static Constants constants = new Constants();
 
@@ -29,14 +32,9 @@ public class Constants {
   private final String channel = "channel";
   private final String appid = "appid";
 
-  private String esIndexPre = "";
-
-  public String getEsIndexPre() {
-    return esIndexPre;
-  }
-
-  public void setEsIndexPre(String esIndexPre) {
-    this.esIndexPre = esIndexPre;
+  public String getUUID(){
+    this.i++;
+    return UUID.randomUUID().toString()+i;
   }
 
   public String getAndroidID() {

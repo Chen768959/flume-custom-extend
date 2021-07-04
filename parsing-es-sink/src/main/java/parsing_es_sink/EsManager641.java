@@ -7,9 +7,12 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
+import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -118,7 +121,7 @@ public class EsManager641 {
         // 处理需要修改时间格式的字段
         preDataFormat(eventEsData);
 
-        request.add(new IndexRequest(esIndex, "_doc", UUID.randomUUID().toString()).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
+        request.add(new IndexRequest(esIndex, "_doc",Constants.getInstance().getUUID()).source(eventEsData).opType(DocWriteRequest.OpType.CREATE));
       });
 
       try {
@@ -138,7 +141,7 @@ public class EsManager641 {
             createIndex(esIndex);
           }
         }catch (Exception e2){
-          LOG.error("判断index是否存在失败",e);
+          LOG.error("判断index是否存在失败",e2);
         }
 
         // 重试
@@ -157,20 +160,37 @@ public class EsManager641 {
   private boolean checkIndexExists(String index) throws IOException {
     if (indexNameCache.contains(index)){
       return true;
-    }else {
-      GetRequest getRequest = new GetRequest(index, "_doc",index);
-      getRequest.fetchSourceContext(new FetchSourceContext(false));
-      getRequest.storedFields("_none_");
+    } else {
+      boolean flag = false;
+      try {
+        flag =esClient.indices().exists(
+                new GetIndexRequest()
+                        .indices(new String[]{index}));
 
-      boolean exists = esClient.exists(getRequest, RequestOptions.DEFAULT);
-
-      if (exists){
-        LOG.info("index已存在，index："+index);
-        indexNameCache.add(index);
+        if (flag){
+          LOG.info("index已存在，index："+index);
+          indexNameCache.add(index);
+        }
+      } catch (ElasticsearchException e) {
+        LOG.error("checkIndexExists异常",e);
       }
-
-      return exists;
+      return flag;
     }
+
+//    if (indexNameCache.contains(index)){
+//      return true;
+//    }else {
+//      GetRequest getRequest = new GetRequest(index, "_doc",index);
+//
+//      boolean exists = esClient.exists(getRequest, RequestOptions.DEFAULT);
+//
+//      if (exists){
+//        LOG.info("index已存在，index："+index);
+//        indexNameCache.add(index);
+//      }
+//
+//      return exists;
+//    }
   }
 
   /**

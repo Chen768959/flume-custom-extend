@@ -32,4 +32,13 @@ public interface ParsingEsManager {
    * @return void
    */
   void getEventEsDataList(JsonNode eventJsonNode, Map<String,List<Map<String, Object>>> eventEsDataListMap) throws JsonProcessingException;
+
+  /**
+   * 判断数据是否属于当前格式
+   * @param eventJsonNode
+   * @author Chen768959
+   * @date 2021/7/4 下午 4:33
+   * @return boolean 属于则true
+   */
+  boolean checkFormat(JsonNode eventJsonNode);
 }
