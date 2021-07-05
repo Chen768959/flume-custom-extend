@@ -38,7 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * 管理es连接
@@ -228,38 +227,167 @@ public class EsManager641 {
     CreateIndexRequest createIndexRequest = new CreateIndexRequest(esIndex);
 
     //1:settings
-
-    HashMap settings_map = new HashMap(2);
+    HashMap settings_map = new HashMap();
 
     settings_map.put("number_of_shards", indexNumberOfShards);
 
     settings_map.put("number_of_replicas", indexNumberOfReplicas);
 
+    settings_map.put("analysis", new HashMap<String,Object>(){{
+      put("normalizer",new HashMap<String,Object>(){{
+        put("my_normalizer",new HashMap<String,Object>(){{
+          put("type","custom");
+          put("filter",new ArrayList<String>(){{
+            add("lowercase");
+          }});
+        }});
+      }});
+    }});
+
     createIndexRequest.settings(settings_map);
 
-//2:mappings
-
+    //2:mappings
     try {
       XContentBuilder builder = XContentFactory.jsonBuilder()
 
               .startObject()
               .startObject("properties")
 
-              .startObject("devinfo")
+              .startObject(Constants.getInstance().getDevinfo())
               .field("type", "object")
               .endObject()
 
-              .startObject("event")
+              .startObject(Constants.getInstance().getEvent())
               .field("type", "object")
               .endObject()
 
-              .startObject("etm")
+              .startObject(Constants.getInstance().getEtm())
               .field("type", "date")
               .field("format", "yyyy/MM/dd HH:mm:ss")
               .endObject()
 
+              .startObject(Constants.getInstance().getAndroidID())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
               .endObject()
 
+              .startObject(Constants.getInstance().getAppid())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getChannel())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getEid())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getIdfa())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getImei())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getImsi())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getIp())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getOaid())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getPhoneNum())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .startObject(Constants.getInstance().getUdid())
+              .field("type", "text")
+              .startObject("fields")
+              .startObject("keyword")
+              .field("normalizer", "my_normalizer")
+              .field("type", "keyword")
+              .field("ignore_above", 256)
+              .endObject()
+              .endObject()
+              .endObject()
+
+              .endObject()
               .endObject();
 
       createIndexRequest.mapping("_doc",builder);
