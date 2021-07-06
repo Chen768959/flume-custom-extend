@@ -2,6 +2,7 @@ package parsing_es_sink.parsing;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import parsing_es_sink.Constants;
@@ -9,6 +10,7 @@ import parsing_es_sink.Constants;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,40 +35,10 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
     JsonNode devInfoNode = eventJsonNode.get("DevInfo");
     if (devInfoNode != null){
       if (devInfoNode.isObject()){
-        eventEsCommonData.put(Constants.getInstance().getImsi(),getText(devInfoNode, "IMSI1"));
-        eventEsCommonData.put(Constants.getInstance().getImei(),getText(devInfoNode, "IMEI1"));
-
-        eventEsCommonData.put(Constants.getInstance().getUdid(),getText(devInfoNode, "UDID"));
-
-        eventEsCommonData.put(Constants.getInstance().getIp(),getText(devInfoNode, "IP"));
-
-        eventEsCommonData.put(Constants.getInstance().getChannel(),getText(devInfoNode, "AC"));
-
-        eventEsCommonData.put(Constants.getInstance().getAppid(),getText(devInfoNode, "APPID"));
-
-        dvTypeEnum dvType = getDvType(devInfoNode);
-        switch (dvType){
-          case ANDROID_10_PRO:
-            String[] dis = getText(devInfoNode, "DI").split("\\-");
-            if (dis.length>0){
-              eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis[dis.length-1]);
-
-              eventEsCommonData.put(Constants.getInstance().getIdfa(),dis[0]);
-
-              eventEsCommonData.put(Constants.getInstance().getOaid(),dis[0]);
-            }
-            break;
-          case ANDROID_10_DOWN:
-            String[] dis2 = getText(devInfoNode, "DI").split("\\-");
-            if (dis2.length>0){
-              eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis2[dis2.length-1]);
-            }
-            break;
-          case IOS:
-            eventEsCommonData.put(Constants.getInstance().getIdfa(),getText(devInfoNode,"IDFA"));
-            break;
-        }
+        analyseDevInfo(devInfoNode, eventEsCommonData);
       }
+    }else {
+      analyseDevInfo(eventJsonNode, eventEsCommonData);
     }
 
     // 解析数组参数
@@ -80,22 +52,25 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
           // 代表event指标，其为tdt中的每一项的k-v格式
           Map<String, String> eventTDT = new HashMap<>();
 
-          eventEsForArrData.put(Constants.getInstance().getEid(),getText(eventJsonNodeForArr,"EID"));
+          String eid = getText(eventJsonNodeForArr, "EID");
+          if (StringUtils.isEmpty(eid)){
+            continue;
+          }
+          eventEsForArrData.put(Constants.getInstance().getEid(),eid);
           eventEsForArrData.put(Constants.getInstance().getEtm(),getText(eventJsonNodeForArr,"ETM"));
 
           // 寻找其中数组的电话和账户
           JsonNode tdtNode = eventJsonNodeForArr.get("TDT");
           if (tdtNode !=null){
-            if (tdtNode.isArray()){
-              // 解析TDT中的每一项，并将其转换为k-v格式
-              for (JsonNode tdtNodeForArr : (ArrayNode)tdtNode){
-                String ek = getText(tdtNodeForArr, "EK");
-                String ev = getText(tdtNodeForArr, "EV");
-
-                eventTDT.put(ek,ev);
-
-                if ("phone_number".equals(ek)){
-                  eventEsForArrData.put(Constants.getInstance().getPhoneNum(),getText(tdtNodeForArr,"EV"));
+            if (tdtNode.isObject()){
+              Iterator<Map.Entry<String, JsonNode>> tdtFields = tdtNode.fields();
+              while (tdtFields.hasNext()){
+                Map.Entry<String, JsonNode> next = tdtFields.next();
+                if ("phone_number".equals(next.getKey())){
+                  eventEsForArrData.put(Constants.getInstance().getPhoneNum(),next.getValue().asText());
+                }
+                if (StringUtils.isNotEmpty(next.getKey())){
+                  eventTDT.put(next.getKey(),next.getValue().asText());
                 }
               }
             }
@@ -144,9 +119,8 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
 
   @Override
   public boolean checkFormat(JsonNode eventJsonNode) {
-    JsonNode devInfoNode = eventJsonNode.get("DevInfo");
     JsonNode eventsNode = eventJsonNode.get("Events");
-    if (devInfoNode != null && eventsNode != null){
+    if (eventsNode != null){
       return true;
     }else {
       return false;
@@ -176,6 +150,42 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
       }
     }else {
       return dvTypeEnum.IOS;
+    }
+  }
+
+  private void analyseDevInfo(JsonNode devInfoNode, Map<String, Object> eventEsCommonData){
+    eventEsCommonData.put(Constants.getInstance().getImsi(),getText(devInfoNode, "IMSI1"));
+    eventEsCommonData.put(Constants.getInstance().getImei(),getText(devInfoNode, "IMEI1"));
+
+    eventEsCommonData.put(Constants.getInstance().getUdid(),getText(devInfoNode, "UDID"));
+
+    eventEsCommonData.put(Constants.getInstance().getIp(),getText(devInfoNode, "IP"));
+
+    eventEsCommonData.put(Constants.getInstance().getChannel(),getText(devInfoNode, "AC"));
+
+    eventEsCommonData.put(Constants.getInstance().getAppid(),getText(devInfoNode, "APPID"));
+
+    dvTypeEnum dvType = getDvType(devInfoNode);
+    switch (dvType){
+      case ANDROID_10_PRO:
+        String[] dis = getText(devInfoNode, "DI").split("\\-");
+        if (dis.length>0){
+          eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis[dis.length-1]);
+
+          eventEsCommonData.put(Constants.getInstance().getIdfa(),dis[0]);
+
+          eventEsCommonData.put(Constants.getInstance().getOaid(),dis[0]);
+        }
+        break;
+      case ANDROID_10_DOWN:
+        String[] dis2 = getText(devInfoNode, "DI").split("\\-");
+        if (dis2.length>0){
+          eventEsCommonData.put(Constants.getInstance().getAndroidID(),dis2[dis2.length-1]);
+        }
+        break;
+      case IOS:
+        eventEsCommonData.put(Constants.getInstance().getIdfa(),getText(devInfoNode,"IDFA"));
+        break;
     }
   }
 }

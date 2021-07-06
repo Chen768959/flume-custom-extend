@@ -2,6 +2,7 @@ package parsing_es_sink.parsing;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import parsing_es_sink.Constants;
@@ -44,7 +45,11 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
           // 代表event指标，其为tdt中的每一项的k-v格式
           Map<String, String> eventTDT = new HashMap<>();
 
-          eventEsForArrData.put(Constants.getInstance().getEid(),getText(eventJsonNodeForArr,"EID"));
+          String eid = getText(eventJsonNodeForArr,"EID");
+          if (StringUtils.isEmpty(eid)){
+            continue;
+          }
+          eventEsForArrData.put(Constants.getInstance().getEid(),eid);
           eventEsForArrData.put(Constants.getInstance().getEtm(),getText(eventJsonNodeForArr,"TM"));
 
           // 寻找其中数组的电话和账户
@@ -56,7 +61,9 @@ public class ParsingManagerSpecialWebImpl extends ParsingManagerBase implements 
                 String ek = getText(tdtNodeForArr, "EK");
                 String ev = getText(tdtNodeForArr, "EV");
 
-                eventTDT.put(ek,ev);
+                if (StringUtils.isNotEmpty(ek)){
+                  eventTDT.put(ek,ev);
+                }
 
                 if ("phone_number".equals(ek)){
                   eventEsForArrData.put(Constants.getInstance().getPhoneNum(),getText(tdtNodeForArr,"EV"));
