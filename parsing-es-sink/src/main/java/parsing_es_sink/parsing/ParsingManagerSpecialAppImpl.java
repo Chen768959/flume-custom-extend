@@ -1,5 +1,6 @@
 package parsing_es_sink.parsing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang.StringUtils;
@@ -46,7 +47,7 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
     if (eventsNode != null){
       if (eventsNode.isArray()){
         // 迭代每一个数组内对象
-        for (JsonNode eventJsonNodeForArr : (ArrayNode)eventsNode){
+        events:for (JsonNode eventJsonNodeForArr : (ArrayNode)eventsNode){
           // 代表该条入es的数据
           Map<String, Object> eventEsForArrData = new HashMap<>();
           // 代表event指标，其为tdt中的每一项的k-v格式
@@ -63,14 +64,22 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
           JsonNode tdtNode = eventJsonNodeForArr.get("TDT");
           if (tdtNode !=null){
             if (tdtNode.isObject()){
-              Iterator<Map.Entry<String, JsonNode>> tdtFields = tdtNode.fields();
-              while (tdtFields.hasNext()){
-                Map.Entry<String, JsonNode> next = tdtFields.next();
-                if ("phone_number".equals(next.getKey())){
-                  eventEsForArrData.put(Constants.getInstance().getPhoneNum(),next.getValue().asText());
-                }
-                if (StringUtils.isNotEmpty(next.getKey())){
-                  eventTDT.put(next.getKey(),next.getValue().asText());
+              // 水晶数据，解析data中的所有事件，每个事件作为一个event
+              if ("crystal_data".equals(eid) && tdtNode.get("data")!=null){
+                String crystalTDTdata = getText(tdtNode,"data");
+                addCrystalTDTdata(crystalTDTdata, eventEsCommonData, eventEsDataListMap);
+                continue events;
+              }else {
+                // 常规解析，TDT中的所有属性作为event，并取出手机号
+                Iterator<Map.Entry<String, JsonNode>> tdtFields = tdtNode.fields();
+                while (tdtFields.hasNext()){
+                  Map.Entry<String, JsonNode> next = tdtFields.next();
+                  if ("phone_number".equals(next.getKey())){
+                    eventEsForArrData.put(Constants.getInstance().getPhoneNum(),next.getValue().asText());
+                  }
+                  if (StringUtils.isNotEmpty(next.getKey())){
+                    eventTDT.put(next.getKey(),next.getValue().asText());
+                  }
                 }
               }
             }
@@ -78,6 +87,93 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
 
           // 将event单独存储
           eventEsForArrData.put(Constants.getInstance().getEvent(),eventTDT);
+
+          // 合并通用属性
+          eventEsForArrData.putAll(eventEsCommonData);
+
+          // 设置devinfo
+          eventEsForArrData.put(Constants.getInstance().getDevinfo(),new HashMap<String,Object>(){{
+            put("IMEI1", Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getImei())).orElse(""));
+            put("UDID",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getUdid())).orElse(""));
+            put("IMSI1",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getImsi())).orElse(""));
+            put("ANDROID",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getAndroidID())).orElse(""));
+            put("IDFA",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getIdfa())).orElse(""));
+            put("PHONE",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getPhoneNum())).orElse(""));
+            put("IP",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getIp())).orElse(""));
+            put("CHANNEL",Optional.ofNullable(eventEsForArrData.get(Constants.getInstance().getChannel())).orElse(""));
+          }});
+
+          // 寻找index，并设置
+          String indexName = this.indexPreStr;
+          try {
+            long date = Long.parseLong((String) eventEsForArrData.get(Constants.getInstance().getEtm()));
+            String formatDate = this.simpleDateFormat.format(date);
+
+            indexName = this.indexPreStr+formatDate+"_"+eventEsForArrData.get(Constants.getInstance().getAppid());
+          }catch (Exception e){
+            LOG.error("解析indexName失败",e);
+          }
+          List<Map<String, Object>> indexNameMaps = eventEsDataListMap.get(indexName);
+          if (indexNameMaps==null){
+            eventEsDataListMap.put(indexName, new ArrayList<Map<String, Object>>(){{
+              add(eventEsForArrData);
+            }});
+          }else {
+            indexNameMaps.add(eventEsForArrData);
+          }
+        }
+      }
+    }
+  }
+
+  private void addCrystalTDTdata(String crystalTDTdataStr, Map<String, Object> eventEsCommonData, Map<String, List<Map<String, Object>>> eventEsDataListMap) {
+    String newCrystalTDTdata = crystalTDTdataStr.replaceAll("\\\\", "").replaceAll("\"\\{", "\\{").replaceAll("\\}\"", "\\}");
+    JsonNode crystalTDTdata = null;
+    try {
+      crystalTDTdata = objectMapper.readTree(newCrystalTDTdata);
+    } catch (JsonProcessingException e) {
+      LOG.error("解析crystalTDTdata异常",e);
+      return;
+    }
+
+    if (crystalTDTdata.isObject()){
+      JsonNode customEvent = crystalTDTdata.get("customEvent");
+      JsonNode sdkSessionInfo = crystalTDTdata.get("sdkSessionInfo");
+      //解析手机号
+      String phoneNum = getText(sdkSessionInfo,"account");
+      //解析每一个event
+      if (customEvent!=null && customEvent.isArray()){
+        for (JsonNode eventFromCustomEvent : (ArrayNode)customEvent){
+          // 代表该条入es的数据
+          Map<String, Object> eventEsForArrData = new HashMap<>();
+
+          // 解析时间
+          eventEsForArrData.put(Constants.getInstance().getEtm(),getText(eventFromCustomEvent, "timestamp"));
+
+          // 解析eid
+          try {
+            JsonNode action = eventFromCustomEvent.get("eventParams").get("action");
+            if (action==null){
+              eventEsForArrData.put(Constants.getInstance().getEid(), getText(eventFromCustomEvent,"eventName"));
+            }else {
+              eventEsForArrData.put(Constants.getInstance().getEid(), getText(action,"type"));
+            }
+          }catch (Exception e){
+            LOG.error("解析crystal_data中data eid异常，事件详情："+eventFromCustomEvent.toString(),e);
+            continue ;
+          }
+
+          // 创建一个对象作为event
+          Map<String, Object> event = new HashMap<>();
+          try {
+            event.put("event",objectMapper.treeToValue(eventFromCustomEvent, Map.class));
+            event.put("sdkSessionInfo", objectMapper.treeToValue(sdkSessionInfo, Map.class));
+          } catch (JsonProcessingException e) {
+            LOG.error("eventFromCustomEvent转换map异常，原始数据："+eventFromCustomEvent,e);
+          }
+
+          // 将event单独存储
+          eventEsForArrData.put(Constants.getInstance().getEvent(),event);
 
           // 合并通用属性
           eventEsForArrData.putAll(eventEsCommonData);
