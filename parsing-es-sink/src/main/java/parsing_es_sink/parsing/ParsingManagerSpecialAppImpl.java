@@ -12,6 +12,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,7 +133,7 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
     try {
       crystalTDTdata = objectMapper.readTree(newCrystalTDTdata);
     } catch (JsonProcessingException e) {
-      LOG.error("解析crystalTDTdata异常",e);
+      LOG.error("解析crystalTDTdata异常，原始数据："+crystalTDTdataStr+"...解析后数据："+newCrystalTDTdata,e);
       return;
     }
 
@@ -154,9 +155,13 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
           try {
             JsonNode action = eventFromCustomEvent.get("eventParams").get("action");
             if (action==null){
-              eventEsForArrData.put(Constants.getInstance().getEid(), getText(eventFromCustomEvent,"eventName"));
+              continue;
             }else {
-              eventEsForArrData.put(Constants.getInstance().getEid(), getText(action,"type"));
+              String type = getText(action, "type");
+              if (StringUtils.isEmpty(type)){
+                type = getText(action.get("nameValuePairs"),"type");
+              }
+              eventEsForArrData.put(Constants.getInstance().getEid(), "crystal_data."+type);
             }
           }catch (Exception e){
             LOG.error("解析crystal_data中data eid异常，事件详情："+eventFromCustomEvent.toString(),e);
@@ -164,10 +169,10 @@ public class ParsingManagerSpecialAppImpl extends ParsingManagerBase implements 
           }
 
           // 创建一个对象作为event
-          Map<String, Object> event = new HashMap<>();
+          Map<String, Object> event = new LinkedHashMap<>();
           try {
             event.put("event",objectMapper.treeToValue(eventFromCustomEvent, Map.class));
-            event.put("sdkSessionInfo", objectMapper.treeToValue(sdkSessionInfo, Map.class));
+            event.put("sdkInfo", objectMapper.treeToValue(sdkSessionInfo, Map.class));
           } catch (JsonProcessingException e) {
             LOG.error("eventFromCustomEvent转换map异常，原始数据："+eventFromCustomEvent,e);
           }
